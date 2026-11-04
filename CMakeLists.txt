@@ -267,6 +267,8 @@ set(PROJECT_SOURCES
     src/UI/Forum/ForumBrowser.cpp
     src/UI/Forum/NewPostDialog.cpp
     src/UI/ThreadBrowser/ThreadBrowserPopup.cpp
+    src/UI/Friends/FriendRow.cpp
+    src/UI/Friends/FriendsView.cpp
     src/UI/Dialogs/TokenInputDialog.cpp
     src/UI/Dialogs/ProxyInputDialog.cpp
     src/UI/Login/LoginView.cpp

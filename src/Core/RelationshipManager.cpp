@@ -16,6 +16,7 @@ void RelationshipManager::loadFromReady(const QList<Discord::Relationship> &rela
             store.insert(r.id.get(), r);
     }
     qCInfo(LogCore) << "Loaded" << store.size() << "relationships from READY";
+    emit relationshipsLoaded();
 }
 
 std::optional<Discord::Relationship> RelationshipManager::getRelationship(Snowflake userId) const
@@ -24,6 +25,17 @@ std::optional<Discord::Relationship> RelationshipManager::getRelationship(Snowfl
     if (it == store.constEnd())
         return std::nullopt;
     return it.value();
+}
+
+QList<Discord::Relationship> RelationshipManager::ofType(Discord::RelationshipType type) const
+{
+    QList<Discord::Relationship> matches;
+    for (auto it = store.constBegin(); it != store.constEnd(); ++it) {
+        const auto &rel = it.value();
+        if (rel.type.hasValue() && rel.type.get() == type)
+            matches.append(rel);
+    }
+    return matches;
 }
 
 QString RelationshipManager::getNickname(Snowflake userId) const

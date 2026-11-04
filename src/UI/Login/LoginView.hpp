@@ -43,6 +43,7 @@ public:
 
     void showQrPage();
     void showPasswordPage();
+    void showTokenPage();
 
 signals:
     void loggedIn(Core::Snowflake accountId);
@@ -53,13 +54,16 @@ protected:
 private:
     QWidget *buildQrPage();
     QWidget *buildFormPage();
+    QWidget *buildTokenPage();
     QWidget *buildMfaPage();
 
     void startQrLogin();
+    void stopQrPolling();
     void ensureRemoteClient(const Core::ProxyConfig &wanted);
     void ensureLoginClient(const Core::ProxyConfig &wanted);
 
     void onLogInClicked();
+    void onTokenLoginClicked();
     void onQrProxyClicked();
     void onBackClicked();
     void onVerifyClicked();
@@ -89,6 +93,7 @@ private:
 
     Discord::LoginClient *loginClient = nullptr;
     Core::ProxyConfig proxy;
+    Core::ProxyConfig tokenProxy;
 
     Discord::RemoteAuthClient *remoteClient = nullptr;
     Core::ProxyConfig remoteProxy;
@@ -98,6 +103,7 @@ private:
     QStackedWidget *stack = nullptr;
     QWidget *qrPage = nullptr;
     QWidget *formPage = nullptr;
+    QWidget *tokenPage = nullptr;
     QWidget *mfaPage = nullptr;
 
     QLabel *qrImage = nullptr;
@@ -109,6 +115,11 @@ private:
     ProxyLineEdit *proxyEdit = nullptr;
     QLabel *formStatus = nullptr;
     QPushButton *loginButton = nullptr;
+
+    QLineEdit *tokenEdit = nullptr;
+    ProxyLineEdit *tokenProxyEdit = nullptr;
+    QLabel *tokenStatus = nullptr;
+    QPushButton *tokenButton = nullptr;
 
     QLabel *mfaTitle = nullptr;
     QComboBox *mfaMethodCombo = nullptr;

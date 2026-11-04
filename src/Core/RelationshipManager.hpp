@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QList>
 #include <QObject>
 
 #include <optional>
@@ -22,6 +23,8 @@ public:
 
     [[nodiscard]] std::optional<Discord::Relationship> getRelationship(Snowflake userId) const;
 
+    [[nodiscard]] QList<Discord::Relationship> ofType(Discord::RelationshipType type) const;
+
     [[nodiscard]] QString getNickname(Snowflake userId) const;
 
     [[nodiscard]] bool isFriend(Snowflake userId) const;
@@ -34,6 +37,7 @@ public slots:
 
 signals:
     void relationshipChanged(Snowflake userId);
+    void relationshipsLoaded();
 
 private:
     QHash<Snowflake, Discord::Relationship> store;

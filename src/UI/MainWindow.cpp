@@ -21,6 +21,8 @@
 #include "Forum/ForumBrowser.hpp"
 #include "Forum/ForumPostModel.hpp"
 #include "Forum/NewPostDialog.hpp"
+#include "Friends/FriendRow.hpp"
+#include "Friends/FriendsView.hpp"
 #include "ThreadBrowser/ThreadBrowserPopup.hpp"
 #include "Core/ForumManager.hpp"
 #include "ChannelList/ChannelTreeModel.hpp"
@@ -511,6 +513,7 @@ void MainWindow::detachInstance(Core::Snowflake accountId)
     memberListModel->setManager(nullptr);
     memberListModel->setPresenceManager(nullptr);
     forumModel->setManager(nullptr);
+    friendsView->setInstance(nullptr);
     typingTracker->clear();
     typingTracker->setUserManager(nullptr);
     if (expressionPicker)
@@ -619,6 +622,8 @@ void MainWindow::switchActiveInstance(Core::ClientInstance *newInstance)
     connect(currentInstance->relationships(), &Core::RelationshipManager::relationshipChanged, this,
             [this](Snowflake userId) { chatModel->refreshUsersInView({ userId }); });
 
+    friendsView->setInstance(currentInstance);
+
 #ifndef ACHERON_NO_VOICE
     updateVoiceStatusLabel();
 #endif
@@ -628,9 +633,12 @@ void MainWindow::setViewMode(ViewMode mode)
 {
     viewMode = mode;
 
-    if (currentInstance)
-        currentInstance->forums()->setCurrentForum(
-                mode == ViewMode::TextChannel ? Core::Snowflake() : currentForumId);
+    if (currentInstance) {
+        // the friends page owns no forum, so it releases the subscription the
+        // same way a plain text channel switch does
+        const bool chatFocused = mode == ViewMode::TextChannel || mode == ViewMode::Friends;
+        currentInstance->forums()->setCurrentForum(chatFocused ? Core::Snowflake() : currentForumId);
+    }
 
     switch (mode) {
     case ViewMode::TextChannel:
@@ -655,7 +663,16 @@ void MainWindow::setViewMode(ViewMode mode)
         threadHeader->setVisible(true);
         popOutButton->setText(tr("Back to forum"));
         break;
+    case ViewMode::Friends:
+        forumBrowser->setVisible(false);
+        threadPane->setVisible(false);
+        threadHeader->setVisible(false);
+        channelToolbar->setVisible(false);
+        break;
     }
+
+    centerSplitter->setVisible(mode != ViewMode::Friends);
+    friendsView->setVisible(mode == ViewMode::Friends);
 
     updateMemberListVisibility();
 }
@@ -1367,10 +1384,28 @@ void MainWindow::setupUi()
     centerSplitter->setStretchFactor(1, 1);
     centerSplitter->setSizes({ 350, 550 });
 
+    friendsView = new FriendsView(session, rightSideWidget);
+    friendsView->setVisible(false);
+    connect(friendsView, &FriendsView::directMessageRequested, this, [this](Snowflake userId) {
+        ClientInstance *instance = currentInstance;
+        if (!instance)
+            return;
+        Snowflake accountId = instance->accountId();
+        instance->openDmChannel(userId, [this, accountId](const Core::Result<Snowflake> &res) {
+            if (res.success())
+                selectChannelInTree(accountId, *res.value);
+        });
+    });
+    connect(friendsView, &FriendsView::profileRequested, this, [this](Snowflake userId) {
+        if (currentInstance)
+            showUserProfile(currentInstance, userId, Snowflake::Invalid);
+    });
+
     rightLayout->addWidget(connectionBanner, 0);
     rightLayout->addWidget(tabBar, 0);
     rightLayout->addWidget(channelToolbar, 0);
     rightLayout->addWidget(centerSplitter, 1);
+    rightLayout->addWidget(friendsView, 1);
 
     memberListView = new MemberListView(central);
     memberListView->setModel(memberListModel);
@@ -1783,6 +1818,18 @@ QWidget *MainWindow::buildLeftSide()
         auto *v = new QVBoxLayout(container);
         v->setContentsMargins(0, 0, 0, 0);
         v->setSpacing(0);
+
+        // The tree layout has no rail home button, so the friends page needs its
+        // own entry point at the top of the sidebar.
+        auto *friendsEntry = new QPushButton(tr("Friends"), container);
+        friendsEntry->setObjectName(QStringLiteral("SidebarFriendsEntry"));
+        friendsEntry->setCursor(Qt::PointingHandCursor);
+        connect(friendsEntry, &QPushButton::clicked, this, [this] {
+            if (currentInstance)
+                showFriendsPage(currentInstance->accountId());
+        });
+        v->addWidget(friendsEntry, 0);
+
         channelTree->show();
         v->addWidget(channelTree, 1);
 #ifndef ACHERON_NO_VOICE
@@ -1935,22 +1982,29 @@ void MainWindow::onRailAccountHomeSelected(Snowflake accountId)
     s.setValue("ui/rail/lastIsHome", true);
 }
 
+void MainWindow::showFriendsPage(Snowflake accountId)
+{
+    // Home is Discord's friends page. The rail layout re-roots the channel pane at
+    // the account's DM header; the tree layout keeps the full account list visible.
+    if (channelListMode == ChannelListMode::Classic)
+        onRailAccountHomeSelected(accountId);
+    else
+        channelTree->setRootIndex({});
+
+    ClientInstance *instance = session->client(accountId);
+    if (!instance)
+        return;
+
+    if (instance != currentInstance)
+        switchActiveInstance(instance);
+
+    friendsView->setInstance(instance);
+    setViewMode(ViewMode::Friends);
+}
+
 void MainWindow::onRailAccountHomeClicked(Snowflake accountId)
 {
-    onRailAccountHomeSelected(accountId);
-
-    auto it = lastViewedChannel.constFind(guildChannelKey(accountId, Snowflake::Invalid));
-    if (it == lastViewedChannel.cend())
-        return;
-
-    ChannelNode *node = channelTreeModel->findChannelTreeNode(it.value(), accountId);
-    if (!node || node->type != ChannelNode::Type::DMChannel)
-        return;
-
-    channelFilterProxy->setSelectedChannel(node->id, accountId);
-    QModelIndex proxy = channelFilterProxy->mapFromSource(channelTreeModel->indexForNode(node));
-    if (proxy.isValid())
-        channelTree->setCurrentIndex(proxy);
+    showFriendsPage(accountId);
 }
 
 void MainWindow::selectInitialRailItem()
@@ -1980,7 +2034,7 @@ void MainWindow::selectInitialRailItem()
             return;
         }
         if (channelTreeModel->dmHeaderIndex(savedRailAccountId).isValid()) {
-            onRailAccountHomeSelected(savedRailAccountId);
+            showFriendsPage(savedRailAccountId);
             return;
         }
     }
@@ -1988,7 +2042,7 @@ void MainWindow::selectInitialRailItem()
     for (int i = 0; i < channelTreeModel->rowCount({}); ++i) {
         QModelIndex accIdx = channelTreeModel->index(i, 0, {});
         if (static_cast<ChannelNode::Type>(accIdx.data(ChannelTreeModel::TypeRole).toInt()) == ChannelNode::Type::Account) {
-            onRailAccountHomeSelected(Snowflake(accIdx.data(ChannelTreeModel::IdRole).toULongLong()));
+            showFriendsPage(Snowflake(accIdx.data(ChannelTreeModel::IdRole).toULongLong()));
             return;
         }
     }
@@ -2015,11 +2069,11 @@ void MainWindow::applyPendingRailSelection(Snowflake accountId)
             channelTreeModel->serverIndex(accountId, savedRailGuildId).isValid())
             onRailGuildSelected(accountId, savedRailGuildId);
         else
-            onRailAccountHomeSelected(accountId);
+            showFriendsPage(accountId);
         return;
     }
 
-    onRailAccountHomeSelected(accountId);
+    showFriendsPage(accountId);
 }
 
 void MainWindow::onRailGuildClicked(Snowflake accountId, Snowflake guildId)

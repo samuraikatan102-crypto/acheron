@@ -210,16 +210,15 @@ void AccountsWindow::performDisconnect(int row)
 
 void AccountsWindow::onAddClicked()
 {
-    TokenInputDialog dlg(tr("Add Account"), tr("Enter your token:"), this,
-                         TokenInputDialog::ProxyField::Shown);
-    if (dlg.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    addAccountWithToken(dlg.getToken(), {}, dlg.getProxy());
+    showLoginDialog(true);
 }
 
 void AccountsWindow::onLoginClicked()
+{
+    showLoginDialog(false);
+}
+
+void AccountsWindow::showLoginDialog(bool startOnTokenPage)
 {
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Log in"));
@@ -231,36 +230,15 @@ void AccountsWindow::onLoginClicked()
     auto *view = new LoginView(session, model, &dlg);
     layout->addWidget(view);
 
+    if (startOnTokenPage)
+        view->showTokenPage();
+
     connect(view, &LoginView::loggedIn, &dlg, &QDialog::accept);
     connect(view, &LoginView::loggedIn, this, [this](Snowflake accountId) {
         session->connectAccount(accountId);
     });
 
     dlg.exec();
-}
-
-void AccountsWindow::addAccountWithToken(const QString &token, const QString &username,
-                                         const Core::ProxyConfig &proxy)
-{
-    if (token.isEmpty())
-        return;
-
-    Snowflake userId = TokenUtils::getIdAndCheckToken(token);
-    if (!userId.isValid()) {
-        QMessageBox::warning(this, tr("Login Failed"), tr("Please try again."));
-        return;
-    }
-
-    AccountInfo acc;
-    acc.id = userId;
-    acc.token = token;
-    acc.username = username.isEmpty() ? "unknown" : username;
-    acc.displayName = acc.username;
-    acc.proxy = proxy;
-
-    Result<void> added = model->addAccount(acc);
-    if (!added.success())
-        QMessageBox::critical(this, tr("Token Save Failed"), tr("The account wasn't added because its token couldn't be saved.") + "\n\n" + added.error);
 }
 
 void AccountsWindow::onConnectFailed(Snowflake, const QString &reason)

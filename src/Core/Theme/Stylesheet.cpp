@@ -281,6 +281,65 @@ QString buildStyleSheet()
     qss += QStringLiteral("QFrame#LoginDivider { color: %1; background-color: %2; }")
                    .arg(hex(divider), hex(divider));
 
+    // The friends page mirrors Discord's: a header of pill tabs over a shaded
+    // list, and an Active Now column separated by a hairline.
+    const QColor statusOnline = m.color(Token::StatusOnline);
+    const QColor rowLine = buttonBg.lighter(118);
+
+    qss += QStringLiteral("QWidget#FriendsHeader { background-color: %1; border-bottom: 1px solid %2; }"
+                          "QLabel#FriendsTitle { color: %3; font-size: 16px; font-weight: 600; }"
+                          "QWidget#FriendsList { background-color: %1; }"
+                          "QLineEdit#FriendsSearch { background-color: %4; color: %5; border: none;"
+                          "  border-radius: %6; padding: %7 %8; font-size: 13px; }")
+                   .arg(hex(baseBg), hex(divider), hex(brightText), hex(windowBg),
+                        hex(primaryText), radiusPx, px(Metrics::spacing(4)),
+                        px(Metrics::spacing(8)));
+
+    qss += QStringLiteral("QPushButton#FriendsTab { background: transparent; color: %1; border: none;"
+                          "  border-radius: %2; padding: %3 %4; font-size: 14px; font-weight: 500; }"
+                          "QPushButton#FriendsTab:hover { background-color: %5; }"
+                          "QPushButton#FriendsTab:checked { background-color: %6; color: %7; }")
+                   .arg(hex(placeholderText), px(radius + 8), px(2), px(Metrics::spacing(10)),
+                        rgba(primaryText, 14), hex(buttonBg), hex(brightText));
+
+    qss += QStringLiteral("QPushButton#FriendsTabAdd { background-color: %1; color: %2; border: none;"
+                          "  border-radius: %3; padding: %4 %5; font-size: 14px; font-weight: 500; }"
+                          "QPushButton#FriendsTabAdd:hover { background-color: %6; }"
+                          "QPushButton#FriendsTabAdd:checked { background-color: %2; color: %7; }")
+                   .arg(rgba(statusOnline, 26), hex(statusOnline), px(radius + 8), px(2),
+                        px(Metrics::spacing(10)), rgba(statusOnline, 48), hex(windowBg));
+
+    qss += QStringLiteral("QLabel#FriendName { color: %1; font-size: 16px; font-weight: 500; }"
+                          "QLabel#FriendHandle { color: %2; font-size: 13px; }"
+                          "QLabel#FriendStatusLine { color: %3; font-size: 13px; }"
+                          "QLabel#FriendSection { color: %1; font-size: 12px; font-weight: 600;"
+                          "  padding: %4 %5; border-bottom: 1px solid %6; }"
+                          "QToolButton#FriendActionButton { background-color: %7; border: none;"
+                          "  border-radius: %4; }"
+                          "QToolButton#FriendActionButton:hover { background-color: %8; }")
+                   .arg(hex(brightText), hex(placeholderText), hex(primaryText), px(16), px(8),
+                        hex(rowLine), hex(windowBg), windowBg.darker(125).name(QColor::HexRgb));
+
+    qss += QStringLiteral("QWidget#ActiveNowPanel { background-color: %1; border-left: 1px solid %2; }"
+                          "QLabel#ActiveNowHeading { color: %3; font-size: 12px; font-weight: 600; }"
+                          "QLabel#ActiveNowName { color: %4; font-size: 15px; font-weight: 600; }"
+                          "QLabel#ActiveNowKind { color: %5; font-size: 11px; font-weight: 700; }"
+                          "QLabel#ActiveNowDetail { color: %6; font-size: 13px; }"
+                          "QLabel#AddFriendTitle { color: %4; font-size: 16px; font-weight: 600; }"
+                          "QLabel#AddFriendHint { color: %5; font-size: 13px; }"
+                          "QWidget#ActiveNowCard { background-color: %7; border-radius: %8; }")
+                   .arg(hex(baseBg), hex(divider), hex(placeholderText), hex(brightText),
+                        hex(placeholderText), hex(primaryText), hex(alternateBaseBg),
+                        px(radius + 4));
+
+    qss += QStringLiteral("QPushButton#SidebarFriendsEntry { background-color: %1; color: %2;"
+                          "  border: none; border-bottom: 1px solid %3; border-radius: 0;"
+                          "  padding: %4 %5; font-size: 13px; font-weight: 600; text-align: left; }"
+                          "QPushButton#SidebarFriendsEntry:hover { background-color: %6; color: %7; }")
+                   .arg(hex(alternateBaseBg), hex(placeholderText), hex(divider),
+                        px(Metrics::spacing(12)), px(Metrics::spacing(16)),
+                        alternateBaseBg.lighter(118).name(QColor::HexRgb), hex(brightText));
+
     return qss;
 }
 

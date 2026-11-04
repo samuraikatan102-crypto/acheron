@@ -57,7 +57,7 @@ private:
     QPushButton *disconnectButton;
 
     void setupUi();
-    void addAccountWithToken(const QString &token, const QString &username, const Core::ProxyConfig &proxy);
+    void showLoginDialog(bool startOnTokenPage);
     void updateDetails(const Acheron::Core::AccountInfo *info);
     void performConnect(int row);
     void performDisconnect(int row);

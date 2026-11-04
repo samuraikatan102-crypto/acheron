@@ -48,6 +48,7 @@ class TypingIndicator;
 class SlowModeIndicator;
 class ConnectionBanner;
 class ChannelTopicLine;
+class FriendsView;
 class GuildSettingsWindow;
 class TrayIcon;
 #ifndef ACHERON_NO_VOICE
@@ -126,6 +127,7 @@ private:
     void onAccountLoggedIn(Core::Snowflake accountId);
     void onRailAccountHomeSelected(Core::Snowflake accountId);
     void onRailAccountHomeClicked(Core::Snowflake accountId);
+    void showFriendsPage(Core::Snowflake accountId);
     void onRailGuildSelected(Core::Snowflake accountId, Core::Snowflake guildId);
     void onRailGuildClicked(Core::Snowflake accountId, Core::Snowflake guildId);
     void selectInitialRailItem();
@@ -148,7 +150,8 @@ private:
     enum class ViewMode { TextChannel,
                           ForumBrowse,
                           ForumSplit,
-                          ThreadPopout };
+                          ThreadPopout,
+                          Friends };
     void setViewMode(ViewMode mode);
     void setMemberListVisible(bool visible);
     void updateMemberListVisibility();
@@ -197,6 +200,7 @@ private:
     QPushButton *closeThreadButton = nullptr;
     ForumBrowser *forumBrowser = nullptr;
     ForumPostModel *forumModel = nullptr;
+    FriendsView *friendsView = nullptr;
     Core::Snowflake currentForumId;
     Core::Snowflake currentForumGuildId;
 

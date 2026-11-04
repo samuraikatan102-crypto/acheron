@@ -102,9 +102,11 @@ LoginView::LoginView(Core::Session *session, AccountsModel *model, QWidget *pare
     stack->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     qrPage = buildQrPage();
     formPage = buildFormPage();
+    tokenPage = buildTokenPage();
     mfaPage = buildMfaPage();
     stack->addWidget(qrPage);
     stack->addWidget(formPage);
+    stack->addWidget(tokenPage);
     stack->addWidget(mfaPage);
     stack->setCurrentWidget(qrPage);
 
@@ -199,13 +201,63 @@ QWidget *LoginView::buildFormPage()
     auto *qrButton = makeLinkButton(tr("Log in with a QR code instead"), page);
     layout->addWidget(qrButton, 0, Qt::AlignHCenter);
 
+    auto *tokenLink = makeLinkButton(tr("Log in with a token instead"), page);
+    layout->addWidget(tokenLink, 0, Qt::AlignHCenter);
+
     connect(loginButton, &QPushButton::clicked, this, &LoginView::onLogInClicked);
     connect(loginEdit, &QLineEdit::returnPressed, this, &LoginView::onLogInClicked);
     connect(passwordEdit, &QLineEdit::returnPressed, this, &LoginView::onLogInClicked);
     connect(qrButton, &QPushButton::clicked, this, &LoginView::showQrPage);
+    connect(tokenLink, &QPushButton::clicked, this, &LoginView::showTokenPage);
     connect(forgot, &QPushButton::clicked, this, []() {
         QDesktopServices::openUrl(QUrl(QStringLiteral("https://discord.com/login?forgot_password")));
     });
+
+    return page;
+}
+
+QWidget *LoginView::buildTokenPage()
+{
+    auto *page = new QWidget(stack);
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(12);
+
+    layout->addWidget(makeLabel("LoginTitle", tr("Log in with a token"), page), 0, Qt::AlignHCenter);
+    layout->addWidget(makeLabel("LoginSubtitle",
+                                tr("Paste the token of an account you already own. It is stored in the "
+                                   "system keyring, never in a file."),
+                                page));
+
+    tokenEdit = new QLineEdit(page);
+    tokenEdit->setObjectName(QStringLiteral("LoginInput"));
+    tokenEdit->setEchoMode(QLineEdit::Password);
+    tokenEdit->setPlaceholderText(tr("Token"));
+    layout->addWidget(makeFieldLabel(tr("TOKEN"), page));
+    layout->addWidget(tokenEdit);
+
+    tokenProxyEdit = new ProxyLineEdit(page);
+    tokenProxyEdit->setObjectName(QStringLiteral("LoginInput"));
+    tokenProxyEdit->setPlaceholderText(tr("socks5://127.0.0.1:1080"));
+    layout->addWidget(makeFieldLabel(tr("PROXY (OPTIONAL)"), page));
+    layout->addWidget(tokenProxyEdit);
+
+    tokenStatus = makeStatus(page);
+    layout->addWidget(tokenStatus);
+
+    tokenButton = new QPushButton(tr("Log In"), page);
+    tokenButton->setObjectName(QStringLiteral("LoginPrimary"));
+    tokenButton->setDefault(true);
+    layout->addWidget(tokenButton);
+
+    layout->addWidget(makeDivider(page));
+
+    auto *passwordButton = makeLinkButton(tr("Log in with an email and password instead"), page);
+    layout->addWidget(passwordButton, 0, Qt::AlignHCenter);
+
+    connect(tokenButton, &QPushButton::clicked, this, &LoginView::onTokenLoginClicked);
+    connect(tokenEdit, &QLineEdit::returnPressed, this, &LoginView::onTokenLoginClicked);
+    connect(passwordButton, &QPushButton::clicked, this, &LoginView::showPasswordPage);
 
     return page;
 }
@@ -275,17 +327,31 @@ void LoginView::showQrPage()
 
 void LoginView::showPasswordPage()
 {
-    // Discord spends a code as soon as it is answered or left, so the next visit
-    // to the QR page gets a fresh client instead of a restarted one
+    stopQrPolling();
+
+    stack->setCurrentWidget(formPage);
+    formStatus->hide();
+    loginEdit->setFocus();
+}
+
+void LoginView::showTokenPage()
+{
+    stopQrPolling();
+
+    stack->setCurrentWidget(tokenPage);
+    tokenStatus->hide();
+    tokenEdit->setFocus();
+}
+
+// Discord spends a code as soon as it is answered or left, so the next visit to
+// the QR page gets a fresh client instead of a restarted one
+void LoginView::stopQrPolling()
+{
     if (remoteClient) {
         remoteClient->stop();
         remoteStarted = false;
     }
     remoteBroken = true;
-
-    stack->setCurrentWidget(formPage);
-    formStatus->hide();
-    loginEdit->setFocus();
 }
 
 void LoginView::startQrLogin()
@@ -371,6 +437,23 @@ void LoginView::onLogInClicked()
     setBusy(true);
     loginButton->setText(tr("Logging in..."));
     loginClient->login(login, passwordEdit->text());
+}
+
+void LoginView::onTokenLoginClicked()
+{
+    const QString token = tokenEdit->text().trimmed();
+    if (token.isEmpty()) {
+        setStatus(tokenStatus, tr("Paste the token of the account you want to log in to."));
+        return;
+    }
+
+    std::optional<Core::ProxyConfig> parsed = tokenProxyEdit->parseOrWarn();
+    if (!parsed)
+        return;
+
+    tokenProxy = *parsed;
+    tokenStatus->hide();
+    storeToken(token);
 }
 
 void LoginView::onBackClicked()
@@ -603,13 +686,7 @@ void LoginView::storeToken(const QString &token)
 {
     QLabel *status = statusForCurrentPage();
     setBusy(false);
-
-    // the polled code is spent once Discord answers, so stop listening for it
-    if (remoteClient) {
-        remoteClient->stop();
-        remoteStarted = false;
-    }
-    remoteBroken = true;
+    stopQrPolling();
 
     const Core::Snowflake userId = Core::TokenUtils::getIdAndCheckToken(token);
     if (!userId.isValid()) {
@@ -622,7 +699,12 @@ void LoginView::storeToken(const QString &token)
     acc.token = token;
     acc.username = pendingUsername.isEmpty() ? QStringLiteral("unknown") : pendingUsername;
     acc.displayName = acc.username;
-    acc.proxy = stack->currentWidget() == qrPage ? remoteProxy : proxy;
+    if (stack->currentWidget() == qrPage)
+        acc.proxy = remoteProxy;
+    else if (stack->currentWidget() == tokenPage)
+        acc.proxy = tokenProxy;
+    else
+        acc.proxy = proxy;
 
     Core::Result<void> added = model->addAccount(acc);
     if (!added.success()) {
@@ -630,7 +712,6 @@ void LoginView::storeToken(const QString &token)
         return;
     }
 
-    setBusy(false);
     emit loggedIn(userId);
 }
 
@@ -640,6 +721,8 @@ QLabel *LoginView::statusForCurrentPage() const
         return qrStatus;
     if (stack->currentWidget() == mfaPage)
         return mfaStatus;
+    if (stack->currentWidget() == tokenPage)
+        return tokenStatus;
     return formStatus;
 }
 
@@ -660,6 +743,7 @@ void LoginView::setBusy(bool busy)
 {
     if (!busy) {
         loginButton->setText(tr("Log In"));
+        tokenButton->setText(tr("Log In"));
         verifyButton->setText(tr("Submit"));
     }
 
@@ -667,6 +751,10 @@ void LoginView::setBusy(bool busy)
     passwordEdit->setEnabled(!busy);
     proxyEdit->setEnabled(!busy);
     loginButton->setEnabled(!busy);
+
+    tokenEdit->setEnabled(!busy);
+    tokenProxyEdit->setEnabled(!busy);
+    tokenButton->setEnabled(!busy);
 
     mfaMethodCombo->setEnabled(!busy);
     codeEdit->setEnabled(!busy);
