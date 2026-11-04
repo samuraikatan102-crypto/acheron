@@ -102,6 +102,8 @@ private:
     [[nodiscard]] QList<GuildSettingsSection> guildSettingsSections(Core::Snowflake accountId, Core::Snowflake guildId);
     void openGuildSettings(Core::Snowflake accountId, Core::Snowflake guildId, GuildSettingsSection section);
     void showUserContextMenu(Core::ClientInstance *instance, Core::Snowflake userId, Core::Snowflake guildId, QPoint globalPos);
+    [[nodiscard]] bool canManageStage(Core::Snowflake accountId, Core::Snowflake channelId);
+    void manageStage(Core::Snowflake accountId, Core::Snowflake channelId);
     void selectChannelInTree(Core::Snowflake accountId, Core::Snowflake channelId);
 
 public:

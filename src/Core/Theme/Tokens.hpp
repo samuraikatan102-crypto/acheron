@@ -66,6 +66,23 @@ inline size_t qHash(Token key, size_t seed = 0) noexcept
     return ::qHash(static_cast<std::underlying_type_t<Token>>(key), seed);
 }
 
+enum class Density {
+    Compact,
+    Normal,
+    Roomy,
+};
+
+// Metrics drive the shape of the generated stylesheet; they are stored in
+// QSettings rather than theme.json because they are not colors.
+namespace Metrics {
+Density density();
+void setDensity(Density value);
+qreal densityScale();
+int cornerRadius();
+void setCornerRadius(int pixels);
+int spacing(int base);
+} // namespace Metrics
+
 } // namespace Theme
 } // namespace Core
 } // namespace Acheron

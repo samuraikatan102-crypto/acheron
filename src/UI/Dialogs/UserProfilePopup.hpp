@@ -5,6 +5,7 @@
 #include <QDialog>
 #include <QPointer>
 
+#include "Core/Result.hpp"
 #include "Core/Snowflake.hpp"
 #include "Discord/Entities.hpp"
 #include "UI/Dialogs/ActivityCard.hpp"
@@ -61,6 +62,9 @@ private:
     void renderMutualServers();
     void renderMutualFriends();
     void renderFriendStatus();
+    void refreshRelationshipActions();
+    void performFriendAction();
+    void showRelationshipResult(const Core::Result<void> &result);
     void renderPresence();
     QUrl activityFallbackImage(const Discord::Activity &activity);
     void updateActivityTicker();
@@ -123,6 +127,10 @@ private:
     QWidget *serverJoinRow = nullptr;
     QLabel *discordJoinLabel = nullptr;
     QLabel *friendsSinceLabel = nullptr;
+    QWidget *friendActionRow = nullptr;
+    QPushButton *friendPrimaryButton = nullptr;
+    QPushButton *friendIgnoreButton = nullptr;
+    QLabel *relationshipFeedbackLabel = nullptr;
 
     QWidget *rolesSection = nullptr;
     QLabel *rolesLabel = nullptr;

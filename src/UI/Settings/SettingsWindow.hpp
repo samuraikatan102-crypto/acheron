@@ -20,6 +20,7 @@ signals:
     void gifSettingsChanged();
     void animationCacheLimitChanged(int megabytes);
     void animationSizeLimitChanged(int megabytes);
+    void voiceSettingsChanged();
 
 private:
     void setupUi();

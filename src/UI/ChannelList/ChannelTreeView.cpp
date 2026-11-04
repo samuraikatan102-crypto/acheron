@@ -222,6 +222,18 @@ void ChannelTreeView::contextMenuEvent(QContextMenuEvent *event)
         menu.addSeparator();
     }
 
+    if (isVoiceChannel && stageAccessProvider) {
+        Core::Snowflake accountId = findAccountIdForIndex(sourceIndex);
+        Core::Snowflake channelId(sourceIndex.data(ChannelTreeModel::IdRole).toULongLong());
+        if (stageAccessProvider(accountId, channelId)) {
+            QAction *stageAction = menu.addAction(tr("Manage Stage"));
+            connect(stageAction, &QAction::triggered, this, [this, proxyIndex]() {
+                emit manageStageRequested(proxyIndex);
+            });
+            menu.addSeparator();
+        }
+    }
+
     if (nodeType == ChannelNode::Type::Server) {
         Core::Snowflake ownerId(sourceIndex.data(ChannelTreeModel::OwnerIdRole).toULongLong());
         Core::Snowflake accountId = findAccountIdForIndex(sourceIndex);
@@ -273,6 +285,11 @@ bool ChannelTreeView::isAccountInVoice(Core::Snowflake accountId) const
 void ChannelTreeView::setGuildSettingsProvider(GuildSettingsAccess::SectionsProvider provider)
 {
     guildSettingsProvider = std::move(provider);
+}
+
+void ChannelTreeView::setStageAccessProvider(StageAccessProvider provider)
+{
+    stageAccessProvider = std::move(provider);
 }
 
 Core::Snowflake ChannelTreeView::findAccountIdForIndex(const QModelIndex &sourceIndex) const

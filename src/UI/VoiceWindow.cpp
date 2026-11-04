@@ -2,6 +2,7 @@
 
 #include "Core/Audio/VoiceManager.hpp"
 #include "Core/ImageManager.hpp"
+#include "Core/Theme/Manager.hpp"
 #include "UI/StatusIndicator.hpp"
 
 #include <QContextMenuEvent>
@@ -54,10 +55,11 @@ void VolumeMeter::paintEvent(QPaintEvent *)
     int barWidth = static_cast<int>(fraction * width());
 
     if (barWidth > 0) {
+        Core::Theme::Manager &theme = Core::Theme::Manager::instance();
         QLinearGradient gradient(0, 0, width(), 0);
-        gradient.setColorAt(0.0, QColor(0x43, 0xb5, 0x81));
-        gradient.setColorAt(0.5, QColor(0xfa, 0xa6, 0x1a));
-        gradient.setColorAt(1.0, QColor(0xf0, 0x47, 0x47));
+        gradient.setColorAt(0.0, theme.color(Core::Theme::Token::StatusOnline));
+        gradient.setColorAt(0.5, theme.color(Core::Theme::Token::StatusIdle));
+        gradient.setColorAt(1.0, theme.color(Core::Theme::Token::StatusDnd));
 
         p.fillRect(0, 0, barWidth, height(), gradient);
     }
@@ -157,11 +159,13 @@ VoiceUserWidget::VoiceUserWidget(Core::Snowflake userId, QWidget *parent)
     muteBtn = new QPushButton(tr("Mute"), this);
     muteBtn->setFixedHeight(20);
     muteBtn->setCheckable(true);
-    muteBtn->setStyleSheet(
-            "QPushButton { background-color: transparent; border: 1px solid palette(dark);"
-            "  border-radius: 3px; font-size: 10px; padding: 0 4px; }"
-            "QPushButton:checked { background-color: #f04747; color: #fff; border-color: #f04747; }"
-            "QPushButton:hover { border-color: palette(highlight); }");
+    const QString mutedColor = Core::Theme::Manager::instance().color(Core::Theme::Token::StatusDnd).name();
+    muteBtn->setStyleSheet(QStringLiteral(
+                                   "QPushButton { background-color: transparent; border: 1px solid palette(dark);"
+                                   "  border-radius: 3px; font-size: 10px; padding: 0 4px; }"
+                                   "QPushButton:checked { background-color: %1; color: #fff; border-color: %1; }"
+                                   "QPushButton:hover { border-color: palette(highlight); }")
+                                   .arg(mutedColor));
 
     stateLabel = new QLabel(this);
     stateLabel->setFixedWidth(24);
@@ -214,7 +218,7 @@ void VoiceUserWidget::setAudioLevel(float rms)
     }
 }
 
-void VoiceUserWidget::setVoiceStateFlags(bool selfMute, bool selfDeaf, bool serverMute, bool serverDeaf, bool suppress)
+void VoiceUserWidget::setVoiceStateFlags(bool selfMute, bool selfDeaf, bool serverMute, bool serverDeaf, bool suppress, bool handRaised)
 {
     QString flags;
     if (serverDeaf || selfDeaf)
@@ -223,6 +227,8 @@ void VoiceUserWidget::setVoiceStateFlags(bool selfMute, bool selfDeaf, bool serv
         flags += "M";
     if (suppress)
         flags += "S";
+    if (handRaised)
+        flags += "R";
     stateLabel->setText(flags);
 }
 
@@ -255,7 +261,23 @@ void VoiceUserWidget::contextMenuEvent(QContextMenuEvent *event)
         });
     }
 
+    if (stageChannel) {
+        auto *speakAction = menu.addAction(tr("Invite to Speak"));
+        connect(speakAction, &QAction::triggered, this, [this]() {
+            emit stageSpeakerRequested(userId, true);
+        });
+        auto *listenAction = menu.addAction(tr("Move Back to Audience"));
+        connect(listenAction, &QAction::triggered, this, [this]() {
+            emit stageSpeakerRequested(userId, false);
+        });
+    }
+
     menu.exec(event->globalPos());
+}
+
+void VoiceUserWidget::setStageChannel(bool stage)
+{
+    stageChannel = stage;
 }
 
 void VoiceUserWidget::setDaveActive(bool active)
@@ -320,6 +342,19 @@ void VoiceWindow::setupUi()
             "QPushButton:hover { text-decoration: underline; }");
     connect(privacyCodeBtn, &QPushButton::clicked, this, &VoiceWindow::showPrivacyCode);
     usersHeaderRow->addWidget(privacyCodeBtn);
+
+    raiseHandButton = new QPushButton(tr("Raise Hand"), this);
+    raiseHandButton->setFlat(true);
+    raiseHandButton->setCursor(Qt::PointingHandCursor);
+    raiseHandButton->hide();
+    raiseHandButton->setStyleSheet(
+            "QPushButton { font-size: 10px; color: palette(highlight); background: transparent;"
+            "  border: none; padding: 0 8px; text-transform: uppercase; font-weight: bold; }"
+            "QPushButton:hover { text-decoration: underline; }");
+    connect(raiseHandButton, &QPushButton::clicked, this, [this]() {
+        emit handToggleRequested(!voiceManager || !voiceManager->isHandRaised());
+    });
+    usersHeaderRow->addWidget(raiseHandButton);
     layout->addLayout(usersHeaderRow);
 
     userScrollArea = new QScrollArea(this);
@@ -415,12 +450,14 @@ void VoiceWindow::setupUi()
 
     connect(inputGainSlider, &QSlider::valueChanged, this, [this](int value) {
         inputGainValue->setText(QString("%1%").arg(value));
+        QSettings().setValue("voice/input_gain", value);
         if (voiceManager)
             voiceManager->setInputGain(static_cast<float>(value) / 100.0f);
     });
 
     connect(outputVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
         outputVolumeValue->setText(QString("%1%").arg(value));
+        QSettings().setValue("voice/output_volume", value);
         if (voiceManager)
             voiceManager->setOutputVolume(static_cast<float>(value) / 100.0f);
     });
@@ -428,6 +465,7 @@ void VoiceWindow::setupUi()
     connect(vadThresholdSlider, &QSlider::valueChanged, this, [this](int value) {
         vadThresholdValue->setText(QString::number(value));
         volumeMeter->setThreshold(static_cast<float>(value));
+        QSettings().setValue("voice/vad_threshold", value);
         if (voiceManager)
             voiceManager->setVadThreshold(static_cast<float>(value));
     });
@@ -620,6 +658,17 @@ void VoiceWindow::loadCodecSettings()
     packetLossSlider->setValue(packetLoss);
     packetLossValue->setText(QString("%1%").arg(packetLoss));
 
+    const int inputGain = settings.value("voice/input_gain", 100).toInt();
+    inputGainSlider->setValue(inputGain);
+    inputGainValue->setText(QString("%1%").arg(inputGain));
+    const int outputVolume = settings.value("voice/output_volume", 100).toInt();
+    outputVolumeSlider->setValue(outputVolume);
+    outputVolumeValue->setText(QString("%1%").arg(outputVolume));
+    const int vadThreshold = settings.value("voice/vad_threshold", 100).toInt();
+    vadThresholdSlider->setValue(vadThreshold);
+    vadThresholdValue->setText(QString::number(vadThreshold));
+    volumeMeter->setThreshold(static_cast<float>(vadThreshold));
+
 #ifdef ACHERON_HAVE_RNNOISE
     noiseSuppressionCheckbox->setChecked(settings.value("voice/noise_suppression", true).toBool());
     rnnoiseVadCheckbox->setChecked(settings.value("voice/rnnoise_vad", true).toBool());
@@ -636,10 +685,19 @@ void VoiceWindow::applyCodecSettingsToManager()
     voiceManager->setOpusSignalType(signalTypeCombo->currentData().toInt());
     voiceManager->setOpusFec(fecCheckbox->isChecked());
     voiceManager->setOpusPacketLossPercent(packetLossSlider->value());
+    voiceManager->setInputGain(static_cast<float>(inputGainSlider->value()) / 100.0f);
+    voiceManager->setOutputVolume(static_cast<float>(outputVolumeSlider->value()) / 100.0f);
+    voiceManager->setVadThreshold(static_cast<float>(vadThresholdSlider->value()));
 #ifdef ACHERON_HAVE_RNNOISE
     voiceManager->setNoiseSuppressionEnabled(noiseSuppressionCheckbox->isChecked());
     voiceManager->setUseRnnoiseVad(rnnoiseVadCheckbox->isChecked());
 #endif
+}
+
+void VoiceWindow::reloadSettings()
+{
+    loadCodecSettings();
+    applyCodecSettingsToManager();
 }
 
 bool VoiceWindow::eventFilter(QObject *obj, QEvent *event)
@@ -704,12 +762,33 @@ void VoiceWindow::setVoiceManager(Core::Audio::VoiceManager *manager)
 
     privacyCodeBtn->setVisible(!voiceManager->privacyCode().isEmpty());
 
+    connect(voiceManager, &Core::Audio::VoiceManager::handRaisedChanged, this, [this](bool raised) {
+        if (raiseHandButton && stageMode)
+            raiseHandButton->setText(raised ? tr("Lower Hand") : tr("Raise Hand"));
+    });
+    if (stageMode)
+        raiseHandButton->setText(voiceManager->isHandRaised() ? tr("Lower Hand") : tr("Raise Hand"));
+
     const auto existing = voiceManager->currentParticipants();
     for (const auto &p : existing)
         onParticipantJoined(p.userId);
 
     applyCodecSettingsToManager();
     refreshDevices();
+}
+
+void VoiceWindow::setStageChannelVisible(bool stage)
+{
+    stageMode = stage;
+
+    if (raiseHandButton) {
+        raiseHandButton->setVisible(stage);
+        const bool raised = voiceManager && voiceManager->isHandRaised();
+        raiseHandButton->setText(raised ? tr("Lower Hand") : tr("Raise Hand"));
+    }
+
+    for (auto *widget : userWidgets)
+        widget->setStageChannel(stage);
 }
 
 void VoiceWindow::setNameResolver(NameResolver resolver)
@@ -838,7 +917,8 @@ void VoiceWindow::onParticipantJoined(Core::Snowflake userId)
 
         const auto *p = voiceManager->participant(userId);
         if (p)
-            widget->setVoiceStateFlags(p->selfMute, p->selfDeaf, p->serverMute, p->serverDeaf, p->suppress);
+            widget->setVoiceStateFlags(p->selfMute, p->selfDeaf, p->serverMute, p->serverDeaf, p->suppress, p->handRaised);
+        widget->setStageChannel(stageMode);
     }
 
     connect(widget, &VoiceUserWidget::volumeChanged, this, [this](Core::Snowflake uid, int pct) {
@@ -864,6 +944,8 @@ void VoiceWindow::onParticipantJoined(Core::Snowflake userId)
     connect(widget, &VoiceUserWidget::profileRequested, this, [this](Core::Snowflake uid) {
         emit userProfileRequested(accountId, uid);
     });
+
+    connect(widget, &VoiceUserWidget::stageSpeakerRequested, this, &VoiceWindow::stageSpeakerRequested);
 
     userListLayout->insertWidget(userListLayout->count() - 1, widget);
     userWidgets.insert(userId, widget);
@@ -895,7 +977,7 @@ void VoiceWindow::onParticipantUpdated(Core::Snowflake userId)
 
     const auto *p = voiceManager->participant(userId);
     if (p)
-        it.value()->setVoiceStateFlags(p->selfMute, p->selfDeaf, p->serverMute, p->serverDeaf, p->suppress);
+        it.value()->setVoiceStateFlags(p->selfMute, p->selfDeaf, p->serverMute, p->serverDeaf, p->suppress, p->handRaised);
 }
 
 void VoiceWindow::onParticipantSpeakingChanged(Core::Snowflake userId, bool speaking)

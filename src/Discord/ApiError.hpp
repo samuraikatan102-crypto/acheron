@@ -10,6 +10,7 @@ struct HttpResponse;
 struct ApiError
 {
     static constexpr int UnknownInvite = 10006;
+    static constexpr int UnknownStageInstance = 10063;
     static constexpr int TooManyEmojis = 30008;
     static constexpr int TooManyReactions = 30010;
     static constexpr int TooManyAnimatedEmojis = 30018;

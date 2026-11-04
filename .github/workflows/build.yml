@@ -28,7 +28,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [MinSizeRel, RelWithDebInfo]
+        # Windows runners cost 10 workflow minutes each, so our fork branch builds
+        # only the shipable configuration.
+        build_type: ${{ github.ref == 'refs/heads/ci/qoder-rework' && fromJSON('["MinSizeRel"]') || fromJSON('["MinSizeRel", "RelWithDebInfo"]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -131,6 +133,7 @@ jobs:
           path: acheron-windows-${{ matrix.build_type }}
 
   build-windows-minimal:
+    if: github.ref != 'refs/heads/ci/qoder-rework'
     runs-on: windows-latest
 
     steps:
@@ -220,6 +223,7 @@ jobs:
           path: acheron-windows-minimal
 
   build-windows-qt5:
+    if: github.ref != 'refs/heads/ci/qoder-rework'
     runs-on: windows-latest
 
     steps:
@@ -342,6 +346,7 @@ jobs:
           path: acheron-windows-qt5-MinSizeRel
 
   build-linux:
+    if: github.ref != 'refs/heads/ci/qoder-rework'
     runs-on: ubuntu-latest
 
     steps:
@@ -403,6 +408,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   build-appimage:
+    if: github.ref != 'refs/heads/ci/qoder-rework'
     # ubuntu-22.04, not -latest: the AppImage bundles Qt but not glibc, so the
     # builder's glibc (2.35 here) is the floor. Covers Debian 12+/Ubuntu 22.04+.
     runs-on: ubuntu-22.04
@@ -558,6 +564,7 @@ jobs:
           path: Acheron*.AppImage
 
   build-macos:
+    if: github.ref != 'refs/heads/ci/qoder-rework'
     runs-on: macos-latest
 
     steps:

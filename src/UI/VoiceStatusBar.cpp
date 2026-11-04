@@ -2,6 +2,7 @@
 #include "VoiceWindow.hpp"
 
 #include "Core/Audio/VoiceManager.hpp"
+#include "Core/Theme/Manager.hpp"
 
 #include <QHBoxLayout>
 #include <QMouseEvent>
@@ -10,10 +11,30 @@
 namespace Acheron {
 namespace UI {
 
+namespace {
+
+// idk why i cant just set some text so this will have to do ig
+QIcon makeXIcon(const QColor &color)
+{
+    QPixmap px(16, 16);
+    px.fill(Qt::transparent);
+    QPainter p(&px);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(color, 2, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(4, 4, 12, 12);
+    p.drawLine(12, 4, 4, 12);
+    return QIcon(px);
+}
+
+} // namespace
+
 VoiceStatusBar::VoiceStatusBar(QWidget *parent) : QWidget(parent)
 {
     setupUi();
     hide();
+
+    connect(&Core::Theme::Manager::instance(), &Core::Theme::Manager::themeChanged,
+            this, &VoiceStatusBar::refreshThemeColors);
 
     closeTimer.setSingleShot(true);
     closeTimer.setInterval(500);
@@ -33,8 +54,7 @@ void VoiceStatusBar::setupUi()
     setFixedHeight(32);
     setCursor(Qt::PointingHandCursor);
 
-    setStyleSheet("QWidget { background-color: #1a1a2e; }"
-                  "QLabel { background: transparent; }");
+    setStyleSheet("QLabel { background: transparent; }");
 
     auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(10, 0, 6, 0);
@@ -42,33 +62,15 @@ void VoiceStatusBar::setupUi()
 
     statusDot = new QLabel(this);
     statusDot->setFixedSize(8, 8);
-    statusDot->setStyleSheet("QLabel { background-color: #999; border-radius: 4px; }");
 
     statusLabel = new QLabel(this);
-    statusLabel->setStyleSheet("QLabel { color: #999; font-size: 11px; font-weight: bold; }");
 
     channelLabel = new QLabel(this);
-    channelLabel->setStyleSheet("QLabel { color: #72767d; font-size: 11px; }");
-
-    // idk why i cant just set some text so this will have to do ig
-    auto makeXIcon = [](QColor color) {
-        QPixmap px(16, 16);
-        px.fill(Qt::transparent);
-        QPainter p(&px);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(QPen(color, 2, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(4, 4, 12, 12);
-        p.drawLine(12, 4, 4, 12);
-        return QIcon(px);
-    };
+    channelLabel->setStyleSheet("QLabel { font-size: 11px; }");
 
     disconnectBtn = new QPushButton(this);
     disconnectBtn->setFixedSize(24, 24);
-    disconnectBtn->setIcon(makeXIcon(QColor(0xf0, 0x47, 0x47)));
     disconnectBtn->setIconSize(QSize(16, 16));
-    disconnectBtn->setStyleSheet(
-            "QPushButton { background: transparent; border: none; }"
-            "QPushButton:hover { background: rgba(240, 71, 71, 30); border-radius: 4px; }");
     disconnectBtn->setCursor(Qt::PointingHandCursor);
     connect(disconnectBtn, &QPushButton::clicked, this, &VoiceStatusBar::disconnectRequested);
 
@@ -77,6 +79,27 @@ void VoiceStatusBar::setupUi()
     layout->addWidget(channelLabel);
     layout->addStretch();
     layout->addWidget(disconnectBtn);
+
+    refreshThemeColors();
+}
+
+void VoiceStatusBar::refreshThemeColors()
+{
+    Core::Theme::Manager &theme = Core::Theme::Manager::instance();
+
+    channelLabel->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 11px; }")
+                                        .arg(theme.color(Core::Theme::Token::PlaceholderText).name()));
+
+    const QColor errorColor = theme.color(Core::Theme::Token::StatusDnd);
+    disconnectBtn->setIcon(makeXIcon(errorColor));
+    disconnectBtn->setStyleSheet(QStringLiteral(
+                                         "QPushButton { background: transparent; border: none; }"
+                                         "QPushButton:hover { background-color: rgba(%1, %2, %3, 30); border-radius: 4px; }")
+                                         .arg(errorColor.red())
+                                         .arg(errorColor.green())
+                                         .arg(errorColor.blue()));
+
+    updateConnectionState();
 }
 
 void VoiceStatusBar::setVoiceManager(Core::Audio::VoiceManager *manager)
@@ -170,10 +193,11 @@ void VoiceStatusBar::updateConnectionState()
     QString textColor;
     QString stateText;
 
+    auto *theme = &Core::Theme::Manager::instance();
     if (connected) {
         stateText = tr("Voice Connected");
-        dotColor = "#43b581";
-        textColor = "#43b581";
+        dotColor = theme->color(Core::Theme::Token::StatusOnline).name();
+        textColor = dotColor;
     } else if (connecting) {
         if (state == State::Connecting)
             stateText = tr("Connecting...");
@@ -181,12 +205,12 @@ void VoiceStatusBar::updateConnectionState()
             stateText = tr("Identifying...");
         else
             stateText = tr("Securing...");
-        dotColor = "#faa61a";
-        textColor = "#faa61a";
+        dotColor = theme->color(Core::Theme::Token::StatusIdle).name();
+        textColor = dotColor;
     } else {
         stateText = tr("Disconnected");
-        dotColor = "#999";
-        textColor = "#999";
+        dotColor = theme->color(Core::Theme::Token::StatusOffline).name();
+        textColor = dotColor;
     }
 
     statusDot->setStyleSheet(QStringLiteral("QLabel { background-color: %1; border-radius: 4px; }").arg(dotColor));
@@ -233,6 +257,8 @@ void VoiceStatusBar::showVoiceWindow()
     if (!voiceWindow) {
         voiceWindow = new VoiceWindow();
         connect(voiceWindow, &VoiceWindow::userProfileRequested, this, &VoiceStatusBar::userProfileRequested);
+        connect(voiceWindow, &VoiceWindow::handToggleRequested, this, &VoiceStatusBar::handToggleRequested);
+        connect(voiceWindow, &VoiceWindow::stageSpeakerRequested, this, &VoiceStatusBar::stageSpeakerRequested);
         configureVoiceWindow();
     }
 
@@ -257,6 +283,23 @@ void VoiceStatusBar::configureVoiceWindow()
         voiceWindow->setStatusResolver(statusResolver);
     if (voiceManager)
         voiceWindow->setVoiceManager(voiceManager);
+    voiceWindow->setStageChannelVisible(stageMode);
+}
+
+void VoiceStatusBar::setStageChannelVisible(bool stage)
+{
+    if (stageMode == stage)
+        return;
+
+    stageMode = stage;
+    if (voiceWindow)
+        voiceWindow->setStageChannelVisible(stage);
+}
+
+void VoiceStatusBar::reloadVoiceSettings()
+{
+    if (voiceWindow)
+        voiceWindow->reloadSettings();
 }
 
 void VoiceStatusBar::disconnectManager()

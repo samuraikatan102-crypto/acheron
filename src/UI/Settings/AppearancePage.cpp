@@ -92,6 +92,37 @@ AppearancePage::AppearancePage(QWidget *parent)
 
     outer->addWidget(generatorGroup);
 
+    auto *metricsGroup = new QGroupBox(tr("Widget metrics"), this);
+    auto *metricsLayout = new QHBoxLayout(metricsGroup);
+    metricsLayout->addWidget(new QLabel(tr("Density:"), metricsGroup));
+
+    auto *densityCombo = new QComboBox(metricsGroup);
+    densityCombo->addItem(tr("Compact"), static_cast<int>(Core::Theme::Density::Compact));
+    densityCombo->addItem(tr("Normal"), static_cast<int>(Core::Theme::Density::Normal));
+    densityCombo->addItem(tr("Roomy"), static_cast<int>(Core::Theme::Density::Roomy));
+    const int densityIndex = densityCombo->findData(static_cast<int>(Core::Theme::Metrics::density()));
+    densityCombo->setCurrentIndex(qMax(0, densityIndex));
+    metricsLayout->addWidget(densityCombo);
+
+    metricsLayout->addWidget(new QLabel(tr("Corner radius:"), metricsGroup));
+    auto *radiusSpin = new QSpinBox(metricsGroup);
+    radiusSpin->setRange(0, 16);
+    radiusSpin->setSuffix(QStringLiteral(" px"));
+    radiusSpin->setValue(Core::Theme::Metrics::cornerRadius());
+    metricsLayout->addWidget(radiusSpin);
+    metricsLayout->addStretch(1);
+
+    outer->addWidget(metricsGroup);
+
+    connect(densityCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, densityCombo]() {
+        Core::Theme::Metrics::setDensity(static_cast<Core::Theme::Density>(densityCombo->currentData().toInt()));
+        Manager::instance().apply();
+    });
+    connect(radiusSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int pixels) {
+        Core::Theme::Metrics::setCornerRadius(pixels);
+        Manager::instance().apply();
+    });
+
     auto *layoutGroup = new QGroupBox(tr("Channel list"), this);
     auto *layoutGroupLayout = new QHBoxLayout(layoutGroup);
     layoutGroupLayout->addWidget(new QLabel(tr("Style:"), layoutGroup));

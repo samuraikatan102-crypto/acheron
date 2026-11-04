@@ -48,7 +48,9 @@ void SettingsWindow::setupUi()
     connect(appearance, &AppearancePage::channelListIndentChanged, this, &SettingsWindow::channelListIndentChanged);
 
 #ifdef ACHERON_HAVE_MINIAUDIO
-    addPage(tr("Audio"), new AudioPage(this));
+    auto *audio = new AudioPage(this);
+    addPage(tr("Audio"), audio);
+    connect(audio, &AudioPage::voiceSettingsChanged, this, &SettingsWindow::voiceSettingsChanged);
 #endif
 
     categoryList->setCurrentRow(0);

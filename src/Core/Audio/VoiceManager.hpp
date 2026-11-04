@@ -34,6 +34,7 @@ struct VoiceParticipant
     bool serverDeaf = false;
     bool suppress = false;
     bool speaking = false;
+    bool handRaised = false;
 };
 
 class VoiceManager : public QObject
@@ -52,6 +53,7 @@ public:
     [[nodiscard]] Discord::Voice::VoiceClient::State clientState() const;
     [[nodiscard]] Snowflake currentChannelId() const { return channelId; }
     [[nodiscard]] Snowflake currentGuildId() const { return guildId; }
+    [[nodiscard]] bool isHandRaised() const { return selfHandRaised; }
 
     void setInputGain(float gain);
     void setOutputVolume(float volume);
@@ -111,6 +113,7 @@ signals:
     void participantSpeakingChanged(Snowflake userId, bool speaking);
     void channelVoiceMemberChanged(Snowflake channelId, Snowflake userId, bool joined);
     void participantVoiceStateChanged(Snowflake channelId, Snowflake userId);
+    void handRaisedChanged(bool raised);
     void participantsCleared();
     void userAudioLevelChanged(Snowflake userId, float rms);
     void privacyCodeChanged(const QString &code);
@@ -136,6 +139,7 @@ private:
     Snowflake channelId;
     bool selfMute = false;
     bool selfDeaf = false;
+    bool selfHandRaised = false;
 
     // pending data: VOICE_SERVER_UPDATE may arrive before VOICE_STATE_UPDATE
     // both are needed to connect

@@ -514,6 +514,7 @@ if(ENABLE_VOICE)
         ${OPUS_TARGET}
         libdave
     )
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ACHERON_HAVE_OPUS)
 
     if(ENABLE_RNNOISE)
         target_link_libraries(${PROJECT_NAME} PRIVATE rnnoise)

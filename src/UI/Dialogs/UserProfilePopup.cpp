@@ -30,6 +30,7 @@
 #include "Core/Presence/PresenceManager.hpp"
 #include "Core/RelationshipManager.hpp"
 #include "Core/Theme/Icons.hpp"
+#include "Core/Theme/Manager.hpp"
 #include "Core/UserManager.hpp"
 #include "Discord/CdnUrls.hpp"
 #include "Discord/Client.hpp"
@@ -421,6 +422,43 @@ QWidget *UserProfilePopup::buildBody()
     infoBlockLayout->addWidget(serverJoinRow);
     infoBlockLayout->addWidget(buildInfoRow(Core::Theme::Icons::Name::MessageCircle, discordJoinLabel, false));
     infoBlockLayout->addWidget(buildInfoRow(Core::Theme::Icons::Name::Handshake, friendsSinceLabel, true));
+
+    if (!isBot() && !(instance && instance->discord() && instance->discord()->getMe().id.get() == userId)) {
+        friendActionRow = new QWidget(body);
+        auto *friendActionLayout = new QHBoxLayout(friendActionRow);
+        friendActionLayout->setContentsMargins(24, 2, 0, 0);
+        friendActionLayout->setSpacing(6);
+
+        friendPrimaryButton = new QPushButton(friendActionRow);
+        friendIgnoreButton = new QPushButton(tr("Ignore"), friendActionRow);
+        friendIgnoreButton->setVisible(false);
+        friendActionLayout->addWidget(friendPrimaryButton, 0);
+        friendActionLayout->addWidget(friendIgnoreButton, 0);
+        friendActionLayout->addStretch(1);
+        infoBlockLayout->addWidget(friendActionRow);
+
+        relationshipFeedbackLabel = new QLabel(infoBlock);
+        relationshipFeedbackLabel->setWordWrap(true);
+        relationshipFeedbackLabel->setTextFormat(Qt::PlainText);
+        relationshipFeedbackLabel->setContentsMargins(24, 0, 0, 0);
+        relationshipFeedbackLabel->setVisible(false);
+        infoBlockLayout->addWidget(relationshipFeedbackLabel);
+
+        connect(friendPrimaryButton, &QPushButton::clicked, this, &UserProfilePopup::performFriendAction);
+        connect(friendIgnoreButton, &QPushButton::clicked, this, [this]() {
+            if (!instance || !instance->discord() || !friendIgnoreButton)
+                return;
+            QPointer<UserProfilePopup> self(this);
+            friendIgnoreButton->setEnabled(false);
+            instance->discord()->removeRelationship(userId, [self](const Core::Result<void> &result) {
+                if (!self)
+                    return;
+                self->friendIgnoreButton->setEnabled(true);
+                self->showRelationshipResult(result);
+            });
+        });
+    }
+
     leftCol->addWidget(infoBlock);
 
     rolesSection = new QWidget(leftContent);
@@ -1042,6 +1080,106 @@ void UserProfilePopup::renderFriendStatus()
     const QColor color = palette().color(emphasized ? QPalette::Text : QPalette::PlaceholderText);
     friendsSinceLabel->setText(text);
     friendsSinceLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 12px;").arg(color.name()));
+
+    refreshRelationshipActions();
+}
+
+void UserProfilePopup::refreshRelationshipActions()
+{
+    if (!friendPrimaryButton || !instance)
+        return;
+
+    // The row is built before the profile fetch lands, so a bot can turn out to be one later.
+    if (friendActionRow)
+        friendActionRow->setVisible(!isBot());
+    if (isBot())
+        return;
+
+    auto rel = instance->relationships()->getRelationship(userId);
+    const auto type = (rel.has_value() && rel->type.hasValue()) ? rel->type.get()
+                                                                : Discord::RelationshipType::NONE;
+
+    switch (type) {
+    case Discord::RelationshipType::FRIEND:
+        friendPrimaryButton->setText(tr("Remove Friend"));
+        break;
+    case Discord::RelationshipType::INCOMING_REQUEST:
+        friendPrimaryButton->setText(tr("Accept Request"));
+        break;
+    case Discord::RelationshipType::OUTGOING_REQUEST:
+        friendPrimaryButton->setText(tr("Cancel Request"));
+        break;
+    case Discord::RelationshipType::BLOCKED:
+        friendPrimaryButton->setText(tr("Unblock"));
+        break;
+    default:
+        friendPrimaryButton->setText(tr("Add Friend"));
+        break;
+    }
+
+    friendIgnoreButton->setVisible(type == Discord::RelationshipType::INCOMING_REQUEST);
+}
+
+void UserProfilePopup::performFriendAction()
+{
+    if (!instance || !instance->discord() || !friendPrimaryButton)
+        return;
+
+    auto rel = instance->relationships()->getRelationship(userId);
+    const auto type = (rel.has_value() && rel->type.hasValue()) ? rel->type.get()
+                                                                : Discord::RelationshipType::NONE;
+
+    auto client = instance->discord();
+    friendPrimaryButton->setEnabled(false);
+    QPointer<UserProfilePopup> self(this);
+    const auto finish = [self](const Core::Result<void> &result) {
+        if (!self)
+            return;
+        self->friendPrimaryButton->setEnabled(true);
+        self->showRelationshipResult(result);
+    };
+
+    switch (type) {
+    case Discord::RelationshipType::INCOMING_REQUEST:
+        client->acceptFriendRequest(userId, finish);
+        break;
+    case Discord::RelationshipType::FRIEND:
+    case Discord::RelationshipType::OUTGOING_REQUEST:
+    case Discord::RelationshipType::BLOCKED:
+        client->removeRelationship(userId, finish);
+        break;
+    default: {
+        std::optional<Discord::User> user = cachedUser();
+        if (!user && hasProfile && profile.user.hasValue())
+            user = profile.user.get();
+        if (!user || !user->username.hasValue()) {
+            friendPrimaryButton->setEnabled(true);
+            showRelationshipResult(Core::Result<void>::makeError(tr("No handle resolved for this user yet.")));
+            return;
+        }
+        client->sendFriendRequest(user->username.get(), user->discriminator.valueOr(), finish);
+        break;
+    }
+    }
+}
+
+void UserProfilePopup::showRelationshipResult(const Core::Result<void> &result)
+{
+    if (!relationshipFeedbackLabel)
+        return;
+
+    if (result.success()) {
+        relationshipFeedbackLabel->setVisible(false);
+        return;
+    }
+
+    relationshipFeedbackLabel->setText(result.error.isEmpty() ? tr("Discord rejected the request.")
+                                                              : result.error);
+    relationshipFeedbackLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 12px;")
+                                                     .arg(Core::Theme::Manager::instance()
+                                                                  .color(Core::Theme::Token::ChatError)
+                                                                  .name()));
+    relationshipFeedbackLabel->setVisible(true);
 }
 
 std::optional<Discord::User> UserProfilePopup::cachedUser() const

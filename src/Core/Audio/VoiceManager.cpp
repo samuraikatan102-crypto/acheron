@@ -84,6 +84,11 @@ void VoiceManager::handleVoiceStateUpdate(const Discord::VoiceState &state)
             if (oldChannel.isValid())
                 emit channelVoiceMemberChanged(oldChannel, accountId, false);
 
+            if (selfHandRaised) {
+                selfHandRaised = false;
+                emit handRaisedChanged(false);
+            }
+
             if (voiceThread)
                 disconnect();
             return;
@@ -113,6 +118,12 @@ void VoiceManager::handleVoiceStateUpdate(const Discord::VoiceState &state)
         bool wasDeaf = selfDeaf;
         selfMute = state.selfMute.get();
         selfDeaf = state.selfDeaf.get();
+
+        const bool handRaised = state.isHandRaised();
+        if (handRaised != selfHandRaised) {
+            selfHandRaised = handRaised;
+            emit handRaisedChanged(selfHandRaised);
+        }
 
         qCInfo(LogVoice) << "Voice state: session =" << voiceSessionId
                          << "channel =" << channelId << "guild =" << guildId;
@@ -163,6 +174,7 @@ void VoiceManager::handleVoiceStateUpdate(const Discord::VoiceState &state)
         p.serverMute = state.mute.get();
         p.serverDeaf = state.deaf.get();
         p.suppress = state.suppress.get();
+        p.handRaised = state.isHandRaised();
 
         if (isNew)
             emit participantJoined(userId);
@@ -644,6 +656,7 @@ void VoiceManager::populateParticipantsFromCache()
         p.serverMute = vs.mute.get();
         p.serverDeaf = vs.deaf.get();
         p.suppress = vs.suppress.get();
+        p.handRaised = vs.isHandRaised();
         participants.insert(it.key(), p);
         emit participantJoined(it.key());
     }

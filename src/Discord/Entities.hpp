@@ -946,6 +946,32 @@ struct VoiceState : Core::JsonUtils::JsonObject
         get(obj, "request_to_speak_timestamp", state.requestToSpeakTimestamp);
         return state;
     }
+
+    // Discord clears a hand with a null timestamp, so an absent field means lowered.
+    [[nodiscard]] bool isHandRaised() const
+    {
+        return requestToSpeakTimestamp.hasValue() && !requestToSpeakTimestamp->isEmpty();
+    }
+};
+
+struct StageInstance : Core::JsonUtils::JsonObject
+{
+    Field<Core::Snowflake> guildId;
+    Field<Core::Snowflake> channelId;
+    Field<QString> topic;
+    Field<int, true> participantCount;
+    Field<int, true> listenerCount;
+
+    static StageInstance fromJson(const QJsonObject &obj)
+    {
+        StageInstance instance;
+        get(obj, "guild_id", instance.guildId);
+        get(obj, "channel_id", instance.channelId);
+        get(obj, "topic", instance.topic);
+        get(obj, "participant_count", instance.participantCount);
+        get(obj, "listener_count", instance.listenerCount);
+        return instance;
+    }
 };
 
 struct GatewayGuild : Core::JsonUtils::JsonObject

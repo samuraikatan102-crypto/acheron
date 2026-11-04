@@ -1,9 +1,11 @@
 #include "Client.hpp"
 
+#include <QDateTime>
 #include <QDebug>
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QPointer>
+#include <QUrlQuery>
 #include <QtMath>
 
 #include "ApiError.hpp"
@@ -405,6 +407,113 @@ void Client::openDmChannel(Snowflake userId, DmChannelCallback callback)
 
                          callback(Core::Result<ChannelCreate>::makeOk(ChannelCreate::fromJson(QJsonDocument::fromJson(response.body).object())));
                      });
+}
+
+namespace {
+
+QString relationshipEndpoint(Snowflake userId)
+{
+    return userId.isValid() ? "/users/@me/relationships/" + QString::number(userId)
+                            : QStringLiteral("/users/@me/relationships");
+}
+
+QString stageInstanceEndpoint(Snowflake channelId)
+{
+    return channelId.isValid() ? "/stage-instances/" + QString::number(channelId)
+                               : QStringLiteral("/stage-instances");
+}
+
+// Accepting a request and blocking a user are the same call with a different type.
+void putRelationshipType(HttpClient *http, Snowflake userId, RelationshipType type, const char *what,
+                         Client::ActionCallback callback)
+{
+    Core::OrderedJson body;
+    body.insert("type", static_cast<int>(type));
+
+    http->put(relationshipEndpoint(userId), body, actionHandler(what, std::move(callback)));
+}
+
+} // namespace
+
+void Client::sendFriendRequest(const QString &username, const QString &discriminator, ActionCallback callback)
+{
+    Core::OrderedJson body;
+    body.insert("username", username);
+    if (!discriminator.isEmpty() && discriminator != QLatin1String("0"))
+        body.insert("discriminator", discriminator);
+
+    // 204 on success; the RELATIONSHIP_ADD gateway event carries the real state.
+    httpClient->post(relationshipEndpoint(Snowflake::Invalid), body, actionHandler("Sending a friend request", std::move(callback)));
+}
+
+void Client::acceptFriendRequest(Snowflake userId, ActionCallback callback)
+{
+    putRelationshipType(httpClient, userId, RelationshipType::FRIEND, "Accepting a friend request", std::move(callback));
+}
+
+void Client::blockUser(Snowflake userId, ActionCallback callback)
+{
+    putRelationshipType(httpClient, userId, RelationshipType::BLOCKED, "Blocking a user", std::move(callback));
+}
+
+void Client::removeRelationship(Snowflake userId, ActionCallback callback)
+{
+    // Same call declines an incoming request, unfriends, and unblocks.
+    httpClient->delete_(relationshipEndpoint(userId),
+                        actionHandler("Removing a relationship", std::move(callback)));
+}
+
+void Client::raiseHand(Snowflake guildId, ActionCallback callback)
+{
+    Core::OrderedJson body;
+    body.insert("request_to_speak_timestamp", QJsonValue(isoTimestamp(QDateTime::currentDateTime())));
+
+    httpClient->patch(guildEndpoint(guildId, "/voice-states/@me"), body,
+                      actionHandler("Raising a hand", std::move(callback)));
+}
+
+void Client::lowerHand(Snowflake guildId, ActionCallback callback)
+{
+    Core::OrderedJson body;
+    body.insert("request_to_speak_timestamp", QJsonValue(QJsonValue::Null));
+
+    httpClient->patch(guildEndpoint(guildId, "/voice-states/@me"), body,
+                      actionHandler("Lowering a hand", std::move(callback)));
+}
+
+void Client::setStageSpeaker(Snowflake guildId, Snowflake userId, Snowflake channelId, bool speaker, ActionCallback callback)
+{
+    Core::OrderedJson body;
+    body.insert("channel_id", QString::number(channelId));
+    body.insert("suppress", !speaker);
+
+    httpClient->patch(guildEndpoint(guildId, "/voice-states/" + QString::number(userId)), body,
+                      actionHandler("Changing a stage speaker", std::move(callback)));
+}
+
+void Client::createStageInstance(Snowflake channelId, const QString &topic, ActionCallback callback)
+{
+    Core::OrderedJson body;
+    body.insert("channel_id", QString::number(channelId));
+    body.insert("topic", topic);
+
+    httpClient->post(stageInstanceEndpoint(Snowflake::Invalid), body,
+                     actionHandler("Starting a stage", std::move(callback)));
+}
+
+void Client::deleteStageInstance(Snowflake channelId, ActionCallback callback)
+{
+    httpClient->delete_(stageInstanceEndpoint(channelId),
+                        actionHandler("Ending a stage", std::move(callback)));
+}
+
+void Client::fetchStageInstance(Snowflake channelId, ResultCallback<StageInstance> callback)
+{
+    httpClient->get(stageInstanceEndpoint(channelId), QUrlQuery(),
+                    valueHandler<StageInstance>("Fetching a stage instance", std::move(callback),
+                                                [](const QJsonDocument &doc) {
+                                                    return StageInstance::fromJson(doc.object());
+                                                }));
 }
 
 namespace {

@@ -44,9 +44,13 @@ public:
     void setAccount(Core::Snowflake accountId);
     void setChannelName(const QString &name);
     void updateConnectionState();
+    void setStageChannelVisible(bool stage);
+    void reloadVoiceSettings();
 
 signals:
     void disconnectRequested();
+    void handToggleRequested(bool raise);
+    void stageSpeakerRequested(Core::Snowflake userId, bool speaker);
     void userProfileRequested(Core::Snowflake accountId, Core::Snowflake userId);
 
 protected:
@@ -54,6 +58,7 @@ protected:
 
 private:
     void setupUi();
+    void refreshThemeColors();
     void disconnectManager();
     void toggleVoiceWindow();
     void showVoiceWindow();
@@ -74,6 +79,7 @@ private:
     QPointer<VoiceWindow> voiceWindow;
     QTimer closeTimer;
     bool wasDisconnected = true;
+    bool stageMode = false;
 };
 
 } // namespace UI

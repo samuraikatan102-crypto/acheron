@@ -3,6 +3,8 @@
 #include <QTreeView>
 #include <QHash>
 
+#include <functional>
+
 #include "Core/Snowflake.hpp"
 #include "UI/GuildSettings/GuildSettingsSection.hpp"
 
@@ -15,6 +17,8 @@ class ChannelTreeView : public QTreeView
 {
     Q_OBJECT
 public:
+    using StageAccessProvider = std::function<bool(Core::Snowflake accountId, Core::Snowflake channelId)>;
+
     ChannelTreeView(QWidget *parent = nullptr);
 
     void setModel(QAbstractItemModel *m) override;
@@ -23,12 +27,14 @@ public:
     void setAccountVoiceChannel(Core::Snowflake accountId, Core::Snowflake channelId);
     [[nodiscard]] bool isAccountInVoice(Core::Snowflake accountId) const;
     void setGuildSettingsProvider(GuildSettingsAccess::SectionsProvider provider);
+    void setStageAccessProvider(StageAccessProvider provider);
     void setMentionJumpEnabled(bool enabled);
 
 signals:
     void markAsReadRequested(const QModelIndex &proxyIndex);
     void openInNewTabRequested(const QModelIndex &proxyIndex);
     void joinVoiceChannelRequested(const QModelIndex &proxyIndex);
+    void manageStageRequested(const QModelIndex &proxyIndex);
     void disconnectVoiceRequested(const QModelIndex &proxyIndex);
     void joinThreadRequested(const QModelIndex &proxyIndex);
     void leaveThreadRequested(const QModelIndex &proxyIndex);
@@ -54,6 +60,7 @@ private:
     QHash<Core::Snowflake, Core::Snowflake> accountVoiceChannels; // accountId -> channelId
     MentionJumpIndicator *mentionJump = nullptr;
     GuildSettingsAccess::SectionsProvider guildSettingsProvider;
+    StageAccessProvider stageAccessProvider;
 };
 
 } // namespace UI

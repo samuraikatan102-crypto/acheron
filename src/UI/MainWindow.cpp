@@ -3,6 +3,8 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPointer>
 #include <QSettings>
@@ -55,6 +57,7 @@
 #include "Dialogs/ConfirmPopup.hpp"
 #include "Dialogs/UserProfilePopup.hpp"
 #include "Chat/ReactionTooltip.hpp"
+#include "Discord/ApiError.hpp"
 #include "Discord/CdnUrls.hpp"
 #include "Core/ImageManager.hpp"
 #include "Core/MemberListManager.hpp"
@@ -844,6 +847,64 @@ void MainWindow::confirmAndLeaveGuild(Snowflake accountId, Snowflake guildId)
     instance->discord()->leaveGuild(guildId);
 }
 
+bool MainWindow::canManageStage(Snowflake accountId, Snowflake channelId)
+{
+    ClientInstance *instance = session->client(accountId);
+    if (!instance)
+        return false;
+
+    const auto channel = instance->getChannel(channelId);
+    if (!channel || !channel->type.hasValue() || channel->type.get() != Discord::ChannelType::GUILD_STAGE_VOICE)
+        return false;
+
+    return instance->permissions()->hasChannelPermission(accountId, channelId, Discord::Permission::MANAGE_CHANNELS);
+}
+
+void MainWindow::manageStage(Snowflake accountId, Snowflake channelId)
+{
+    ClientInstance *instance = session->client(accountId);
+    if (!instance)
+        return;
+
+    QPointer<ClientInstance> instanceGuard(instance);
+    instance->discord()->fetchStageInstance(channelId, [this, instanceGuard, channelId](const Core::Result<Discord::StageInstance> &result) {
+        Discord::Client *client = instanceGuard ? instanceGuard->discord() : nullptr;
+        if (!client)
+            return;
+
+        if (result.success()) {
+            const QString topic = result.value->topic.valueOr();
+            ConfirmPopup dialog(tr("End Stage"),
+                                tr("Stage <b>%1</b> is live. End it for everyone?").arg(topic.toHtmlEscaped()),
+                                tr("End Stage"), this);
+            if (dialog.exec() != QDialog::Accepted)
+                return;
+
+            client->deleteStageInstance(channelId, [this](const Core::Result<void> &outcome) {
+                if (!outcome.success())
+                    QMessageBox::warning(this, tr("End Stage"), outcome.error);
+            });
+            return;
+        }
+
+        if (result.code != Discord::ApiError::UnknownStageInstance) {
+            QMessageBox::warning(this, tr("Stage"), result.error);
+            return;
+        }
+
+        bool accepted = false;
+        const QString topic = QInputDialog::getText(this, tr("Start Stage"), tr("Stage topic:"),
+                                                   QLineEdit::Normal, QString(), &accepted).trimmed();
+        if (!accepted || topic.isEmpty())
+            return;
+
+        client->createStageInstance(channelId, topic, [this](const Core::Result<void> &outcome) {
+            if (!outcome.success())
+                QMessageBox::warning(this, tr("Start Stage"), outcome.error);
+        });
+    });
+}
+
 QList<GuildSettingsSection> MainWindow::guildSettingsSections(Snowflake accountId, Snowflake guildId)
 {
     return GuildSettingsAccess::visibleSections(session->client(accountId), guildId);
@@ -1116,6 +1177,26 @@ void MainWindow::setupUi()
                 if (!instance)
                     return;
                 showUserProfile(instance, userId, instance->voiceGuildId());
+            });
+    connect(voiceStatusBar, &VoiceStatusBar::handToggleRequested, this, [this](bool raise) {
+        for (const auto &inst : session->getClients()) {
+            if (!inst || !inst->isInVoice())
+                continue;
+            if (raise)
+                inst->discord()->raiseHand(inst->voiceGuildId());
+            else
+                inst->discord()->lowerHand(inst->voiceGuildId());
+            break;
+        }
+    });
+    connect(voiceStatusBar, &VoiceStatusBar::stageSpeakerRequested, this,
+            [this](Snowflake userId, bool speaker) {
+                for (const auto &inst : session->getClients()) {
+                    if (!inst || !inst->isInVoice())
+                        continue;
+                    inst->discord()->setStageSpeaker(inst->voiceGuildId(), userId, inst->voiceChannelId(), speaker);
+                    break;
+                }
             });
 #endif
 
@@ -1563,6 +1644,22 @@ void MainWindow::setupUi()
     connect(channelTree, &ChannelTreeView::leaveGuildRequested, this, &MainWindow::confirmAndLeaveGuild);
     channelTree->setGuildSettingsProvider(std::bind_front(&MainWindow::guildSettingsSections, this));
     connect(channelTree, &ChannelTreeView::guildSettingsRequested, this, &MainWindow::openGuildSettings);
+
+    channelTree->setStageAccessProvider([this](Snowflake accountId, Snowflake channelId) {
+        return canManageStage(accountId, channelId);
+    });
+    connect(channelTree, &ChannelTreeView::manageStageRequested, this, [this](const QModelIndex &proxyIndex) {
+        QModelIndex sourceIndex = channelFilterProxy->mapToSource(proxyIndex);
+        auto *node = channelTreeModel->nodeFromIndex(sourceIndex);
+        if (!node)
+            return;
+
+        ChannelNode *accountNode = channelTreeModel->getAccountNodeFor(node);
+        if (!accountNode)
+            return;
+
+        manageStage(accountNode->id, node->id);
+    });
 
 #ifndef ACHERON_NO_VOICE
     connect(channelTree, &ChannelTreeView::joinVoiceChannelRequested, this,
@@ -2059,6 +2156,17 @@ void MainWindow::updateVoiceStatusLabel()
         }
     }
     voiceStatusBar->setChannelName(channelName);
+
+    bool isStage = false;
+    if (voiceInstance) {
+        const Core::Snowflake vcId = voiceInstance->voiceChannelId();
+        if (vcId.isValid()) {
+            auto channel = voiceInstance->getChannel(vcId);
+            isStage = channel && channel->type.hasValue() &&
+                      channel->type.get() == Discord::ChannelType::GUILD_STAGE_VOICE;
+        }
+    }
+    voiceStatusBar->setStageChannelVisible(isStage);
 }
 #endif
 
@@ -2508,6 +2616,11 @@ void MainWindow::openSettingsWindow()
                 &Core::AnimatedImageCache::setCacheLimitMiB);
         connect(settingsWindow, &SettingsWindow::animationSizeLimitChanged, session->getAnimatedImageCache(),
                 &Core::AnimatedImageCache::setAnimationLimitMiB);
+#ifndef ACHERON_NO_VOICE
+        connect(settingsWindow, &SettingsWindow::voiceSettingsChanged, this, [this]() {
+            voiceStatusBar->reloadVoiceSettings();
+        });
+#endif
     }
 
     settingsWindow->show();
@@ -2742,6 +2855,72 @@ void MainWindow::showUserContextMenu(ClientInstance *instance, Snowflake userId,
                 selectChannelInTree(accountId, *res.value);
         });
     });
+
+    if (instance && userId != instance->accountId()) {
+        const auto cachedUser = instance->users()->getUser(userId);
+        const bool botUser = cachedUser && cachedUser->bot.hasValue() && cachedUser->bot.get();
+        if (!botUser) {
+            const auto rel = instance->relationships()->getRelationship(userId);
+            const auto type = (rel.has_value() && rel->type.hasValue())
+                                  ? rel->type.get()
+                                  : Discord::RelationshipType::NONE;
+
+            // An add needs the handle, which is missing until the user is cached.
+            const bool canAct = type != Discord::RelationshipType::NONE ||
+                                (cachedUser && cachedUser->username.hasValue());
+            if (canAct) {
+                QString label;
+                switch (type) {
+                case Discord::RelationshipType::FRIEND:
+                    label = tr("Remove Friend");
+                    break;
+                case Discord::RelationshipType::INCOMING_REQUEST:
+                    label = tr("Accept Request");
+                    break;
+                case Discord::RelationshipType::OUTGOING_REQUEST:
+                    label = tr("Cancel Request");
+                    break;
+                case Discord::RelationshipType::BLOCKED:
+                    label = tr("Unblock");
+                    break;
+                default:
+                    label = tr("Add Friend");
+                    break;
+                }
+
+                QAction *friendAction = menu.addAction(label);
+                connect(friendAction, &QAction::triggered, this,
+                        [instanceGuard, userId, type]() {
+                            Discord::Client *client = instanceGuard ? instanceGuard->discord() : nullptr;
+                            if (!client)
+                                return;
+                            switch (type) {
+                            case Discord::RelationshipType::INCOMING_REQUEST:
+                                client->acceptFriendRequest(userId);
+                                break;
+                            case Discord::RelationshipType::NONE: {
+                                const auto user = instanceGuard->users()->getUser(userId);
+                                if (user && user->username.hasValue())
+                                    client->sendFriendRequest(user->username.get(), user->discriminator.valueOr());
+                                break;
+                            }
+                            default:
+                                client->removeRelationship(userId);
+                                break;
+                            }
+                        });
+
+                if (type != Discord::RelationshipType::BLOCKED) {
+                    QAction *blockAction = menu.addAction(tr("Block User"));
+                    connect(blockAction, &QAction::triggered, this, [instanceGuard, userId]() {
+                        Discord::Client *client = instanceGuard ? instanceGuard->discord() : nullptr;
+                        if (client)
+                            client->blockUser(userId);
+                    });
+                }
+            }
+        }
+    }
 
     if (guildId.isValid() && instance) {
         const auto target = MemberModeration::targetFor(instance, guildId, userId);

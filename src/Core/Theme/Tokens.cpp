@@ -1,5 +1,7 @@
 #include "Tokens.hpp"
 
+#include <QSettings>
+
 namespace Acheron {
 namespace Core {
 namespace Theme {
@@ -87,6 +89,53 @@ const TokenDescriptor &descriptor(Token token)
     }
     return registry().front(); // just in case
 }
+
+namespace Metrics {
+
+namespace {
+constexpr const char *DensityKey = "appearance/density";
+constexpr const char *RadiusKey = "appearance/radius";
+} // namespace
+
+Density density()
+{
+    const int stored = QSettings().value(DensityKey, static_cast<int>(Density::Normal)).toInt();
+    return stored >= 0 && stored <= 2 ? static_cast<Density>(stored) : Density::Normal;
+}
+
+void setDensity(Density value)
+{
+    QSettings().setValue(DensityKey, static_cast<int>(value));
+}
+
+qreal densityScale()
+{
+    switch (density()) {
+    case Density::Compact:
+        return 0.8;
+    case Density::Roomy:
+        return 1.25;
+    default:
+        return 1.0;
+    }
+}
+
+int cornerRadius()
+{
+    return qBound(0, QSettings().value(RadiusKey, 6).toInt(), 16);
+}
+
+void setCornerRadius(int pixels)
+{
+    QSettings().setValue(RadiusKey, qBound(0, pixels, 16));
+}
+
+int spacing(int base)
+{
+    return qMax(1, qRound(base * densityScale()));
+}
+
+} // namespace Metrics
 
 } // namespace Theme
 } // namespace Core

@@ -13,6 +13,9 @@ class AudioPage : public QWidget
 public:
     explicit AudioPage(QWidget *parent = nullptr);
 
+signals:
+    void voiceSettingsChanged();
+
 private:
     QComboBox *backendCombo;
 };

@@ -200,6 +200,20 @@ public:
     using ResultCallback = std::function<void(const Core::Result<T> &)>;
     using ActionCallback = ResultCallback<void>;
 
+    // A handle match needs the legacy discriminator only while the user still has one.
+    void sendFriendRequest(const QString &username, const QString &discriminator, ActionCallback callback = {});
+    void acceptFriendRequest(Snowflake userId, ActionCallback callback = {});
+    void removeRelationship(Snowflake userId, ActionCallback callback = {});
+    void blockUser(Snowflake userId, ActionCallback callback = {});
+
+    // Stage. Raising a hand sets request_to_speak_timestamp, lowering sends a null one.
+    void raiseHand(Snowflake guildId, ActionCallback callback = {});
+    void lowerHand(Snowflake guildId, ActionCallback callback = {});
+    void setStageSpeaker(Snowflake guildId, Snowflake userId, Snowflake channelId, bool speaker, ActionCallback callback = {});
+    void createStageInstance(Snowflake channelId, const QString &topic, ActionCallback callback = {});
+    void deleteStageInstance(Snowflake channelId, ActionCallback callback = {});
+    void fetchStageInstance(Snowflake channelId, ResultCallback<StageInstance> callback);
+
     void fetchReactors(Snowflake channelId, Snowflake messageId, const QString &reactionKey, bool isBurst, int limit, std::optional<Snowflake> after, ResultCallback<QList<User>> callback);
 
     void fetchGuildProfile(Snowflake guildId, ResultCallback<GuildProfileEdit> callback);

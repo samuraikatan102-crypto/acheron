@@ -87,13 +87,14 @@ public:
 
     void setSpeaking(bool speaking);
     void setAudioLevel(float rms);
-    void setVoiceStateFlags(bool selfMute, bool selfDeaf, bool serverMute, bool serverDeaf, bool suppress);
+    void setVoiceStateFlags(bool selfMute, bool selfDeaf, bool serverMute, bool serverDeaf, bool suppress, bool handRaised);
     void setLocallyMuted(bool muted);
     void setVolume(int pct);
     void setDisplayName(const QString &name);
     void setAvatar(const QPixmap &pm);
     void setStatus(const Core::PresenceBadge &badge);
     void setDaveActive(bool active);
+    void setStageChannel(bool stage);
     int volume() const { return volumeSlider->value(); }
 
 signals:
@@ -101,6 +102,7 @@ signals:
     void muteToggled(Core::Snowflake userId, bool muted);
     void verificationCodeRequested(Core::Snowflake userId);
     void profileRequested(Core::Snowflake userId);
+    void stageSpeakerRequested(Core::Snowflake userId, bool speaker);
 
 protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
@@ -116,6 +118,7 @@ private:
     QTimer speakingDecayTimer;
     bool locallyMuted = false;
     bool daveActive = false;
+    bool stageChannel = false;
 
     static constexpr int SPEAKING_DECAY_MS = 300;
 };
@@ -138,9 +141,13 @@ public:
     void setImageManager(Core::ImageManager *manager);
     void setAccount(Core::Snowflake accountId);
     void refreshDevices();
+    void reloadSettings();
+    void setStageChannelVisible(bool stage);
 
 signals:
     void userProfileRequested(Core::Snowflake accountId, Core::Snowflake userId);
+    void handToggleRequested(bool raise);
+    void stageSpeakerRequested(Core::Snowflake userId, bool speaker);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -179,6 +186,8 @@ private:
     QVBoxLayout *userListLayout;
     QHash<Core::Snowflake, VoiceUserWidget *> userWidgets;
     QPushButton *privacyCodeBtn;
+    QPushButton *raiseHandButton = nullptr;
+    bool stageMode = false;
 
     VolumeMeter *volumeMeter;
     QComboBox *inputDeviceCombo;
