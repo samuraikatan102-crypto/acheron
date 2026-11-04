@@ -342,6 +342,25 @@ QString buildStyleSheet()
                         px(Metrics::spacing(12)), px(Metrics::spacing(16)),
                         alternateBaseBg.lighter(118).name(QColor::HexRgb), hex(brightText));
 
+    // Discord pins the call and the account controls to the bottom-left corner on
+    // a strip that sits a shade below the sidebar.
+    const QColor panelBg = alternateBaseBg.darker(112);
+
+    qss += QStringLiteral("QWidget#UserPanel { background-color: %1; }"
+                          "QWidget#UserRow { background-color: %1; }"
+                          "QWidget#VoiceCard { background-color: %1; border-top: 1px solid %2;"
+                          "  border-bottom: 1px solid %2; }"
+                          "QLabel#VoiceCardTitle { font-size: 12px; font-weight: 600; }"
+                          "QLabel#VoiceCardChannel, QLabel#UserPanelStatus {"
+                          "  color: %3; font-size: 11px; }"
+                          "QLabel#UserPanelName { color: %4; font-size: 13px; font-weight: 600; }"
+                          "QPushButton#PanelIconButton { background: transparent; border: none;"
+                          "  border-radius: 15px; }"
+                          "QPushButton#PanelIconButton:hover { background-color: %5; }"
+                          "QPushButton#PanelIconButton:pressed { background-color: %6; }")
+                   .arg(hex(panelBg), hex(divider), hex(placeholderText), hex(brightText),
+                        rgba(primaryText, 14), rgba(primaryText, 24));
+
     // User Settings opens over the app like Discord's: a darker navigation rail
     // on the left, the page on the right, and an X in the corner.
     const QColor danger = m.color(Token::StatusDnd);

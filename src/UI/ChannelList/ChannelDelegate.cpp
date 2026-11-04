@@ -432,7 +432,7 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
         int avatarY = contentOpt.rect.top() + (contentOpt.rect.height() - avatarSize) / 2;
         QRect avatarRect(avatarX, avatarY, avatarSize, avatarSize);
 
-        constexpr qreal avatarRadius = 3.0;
+        constexpr qreal avatarRadius = avatarSize / 2.0;
         QPixmap avatar = qvariant_cast<QPixmap>(index.data(Qt::DecorationRole));
         if (!avatar.isNull()) {
             painter->save();
@@ -525,8 +525,17 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
                                iconSize, iconSize);
 
         QPixmap icon = qvariant_cast<QPixmap>(index.data(Qt::DecorationRole));
-        if (!icon.isNull())
+        if (!icon.isNull()) {
+            // DM recipients and servers show an avatar here, and Discord always
+            // masks those into a circle.
+            painter->save();
+            painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+            QPainterPath clip;
+            clip.addEllipse(iconRect);
+            painter->setClipPath(clip);
             painter->drawPixmap(iconRect, icon);
+            painter->restore();
+        }
 
         if (node->type == ChannelNode::Type::DMChannel && node->dmRecipientId.isValid()) {
             constexpr int statusDotSize = 8;

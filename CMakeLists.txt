@@ -205,6 +205,7 @@ set(PROJECT_SOURCES
     src/Core/Media/ClipPlayer.cpp
     src/Core/Media/CurlAvio.cpp
     src/UI/MainWindow.cpp
+    src/UI/UserPanel.cpp
     src/UI/BrowserCaptchaResolver.cpp
     src/UI/TypingIndicator.cpp
     src/UI/SlowModeIndicator.cpp
@@ -327,8 +328,6 @@ set(PROJECT_SOURCES
 
 if(ENABLE_VOICE)
     list(APPEND PROJECT_SOURCES
-        src/UI/VoiceStatusBar.cpp
-        src/UI/VoiceWindow.cpp
         src/Discord/Voice/VoiceGateway.cpp
         src/Discord/Voice/UdpTransport.cpp
         src/Discord/Voice/Socks5UdpAssociation.cpp
@@ -352,6 +351,7 @@ if(ENABLE_VOICE OR TARGET ffmpeg)
     list(APPEND PROJECT_SOURCES
         src/Core/Audio/MiniaudioImpl.cpp
         src/Core/Audio/AudioBackends.cpp
+        src/UI/VolumeMeter.cpp
         src/UI/Settings/AudioPage.cpp
     )
 endif()

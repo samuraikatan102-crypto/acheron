@@ -31,7 +31,8 @@ QColor themeColor(Core::Theme::Token token)
 
 FriendAvatar::FriendAvatar(QWidget *parent) : QLabel(parent)
 {
-    setFixedSize(AvatarSize, AvatarSize);
+    side = AvatarSize;
+    setFixedSize(side, side);
     setScaledContents(true);
     ringColor = themeColor(Core::Theme::Token::BaseBg);
 }
@@ -51,9 +52,20 @@ void FriendAvatar::setRingColor(const QColor &color)
     update();
 }
 
+void FriendAvatar::setSize(int newSide)
+{
+    if (newSide <= 0 || newSide == side)
+        return;
+
+    side = newSide;
+    dotSize = qMax(6, side / 5);
+    setFixedSize(side, side);
+    update();
+}
+
 QSize FriendAvatar::sizeHint() const
 {
-    return QSize(AvatarSize, AvatarSize);
+    return QSize(side, side);
 }
 
 void FriendAvatar::paintEvent(QPaintEvent *)

@@ -51,7 +51,7 @@ class FriendsView;
 class GuildSettingsWindow;
 class TrayIcon;
 #ifndef ACHERON_NO_VOICE
-class VoiceStatusBar;
+class UserPanel;
 #endif
 } // namespace UI
 } // namespace Acheron
@@ -140,8 +140,9 @@ private:
     bool channelReadable(Core::Snowflake accountId, Core::Snowflake guildId, Core::Snowflake channelId);
     void markIndexAsRead(Core::Snowflake accountId, const QModelIndex &sourceIndex);
     void recordLastViewedChannel(Core::Snowflake accountId, Core::Snowflake guildId, Core::Snowflake channelId);
+    void refreshUserPanelIdentity();
 #ifndef ACHERON_NO_VOICE
-    void updateVoiceStatusLabel();
+    void updateVoicePanel();
 #endif
 
 private:
@@ -242,9 +243,7 @@ private:
     MemberListModel *memberListModel;
     Core::TypingTracker *typingTracker;
 
-#ifndef ACHERON_NO_VOICE
-    VoiceStatusBar *voiceStatusBar;
-#endif
+    UserPanel *userPanel = nullptr;
     LoginView *loginView = nullptr;
     QStackedLayout *shellPages = nullptr;
     SettingsWindow *settingsWindow = nullptr;

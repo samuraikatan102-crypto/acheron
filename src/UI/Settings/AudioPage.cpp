@@ -4,7 +4,7 @@
 
 #ifndef ACHERON_NO_VOICE
 #include "Core/Audio/VoiceManager.hpp"
-#include "UI/VoiceWindow.hpp"
+#include "UI/VolumeMeter.hpp"
 #endif
 
 #ifdef ACHERON_HAVE_OPUS

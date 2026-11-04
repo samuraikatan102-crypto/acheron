@@ -25,6 +25,7 @@ public:
 
     void setBadge(const Core::PresenceBadge &newBadge);
     void setRingColor(const QColor &color);
+    void setSize(int side);
 
     QSize sizeHint() const override;
 
@@ -35,6 +36,7 @@ private:
     Core::PresenceBadge badge;
     QColor ringColor;
     int dotSize = 10;
+    int side = 48;
 };
 
 // One row of the friends list: avatar, name, status line and the two buttons

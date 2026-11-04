@@ -66,9 +66,10 @@
 #include "Core/Presence/PresenceManager.hpp"
 #include "Core/Session.hpp"
 #include "Core/Theme/Manager.hpp"
+#include "UserPanel.hpp"
 #ifndef ACHERON_NO_VOICE
 #include "Core/Audio/VoiceManager.hpp"
-#include "VoiceStatusBar.hpp"
+#include "Discord/Voice/VoiceClient.hpp"
 #endif
 
 using namespace Acheron::Core;
@@ -621,10 +622,14 @@ void MainWindow::switchActiveInstance(Core::ClientInstance *newInstance)
     connect(currentInstance->relationships(), &Core::RelationshipManager::relationshipChanged, this,
             [this](Snowflake userId) { chatModel->refreshUsersInView({ userId }); });
 
+    connect(currentInstance, &Core::ClientInstance::detailsUpdated, this,
+            [this](const Core::AccountInfo &) { refreshUserPanelIdentity(); }, Qt::UniqueConnection);
+
     friendsView->setInstance(currentInstance);
 
+    refreshUserPanelIdentity();
 #ifndef ACHERON_NO_VOICE
-    updateVoiceStatusLabel();
+    updateVoicePanel();
 #endif
 }
 
@@ -1092,10 +1097,8 @@ void MainWindow::setupPermanentConnections(Core::ClientInstance *instance)
     connect(instance->presences(), &Core::PresenceManager::presencesChanged, this,
             [this, instance](const QList<Core::Snowflake> &userIds) {
                 channelTreeModel->updatePresence(instance->accountId(), userIds);
-#ifndef ACHERON_NO_VOICE
-                if (voiceStatusBar)
-                    voiceStatusBar->refreshPresences(userIds);
-#endif
+                if (instance == currentInstance)
+                    refreshUserPanelIdentity();
             });
 
     connect(instance, &Core::ClientInstance::forumBadgeChanged, this,
@@ -1153,13 +1156,13 @@ void MainWindow::setupPermanentConnections(Core::ClientInstance *instance)
                 channelTree->setAccountVoiceChannel(instance->accountId(), channelId);
                 channelTreeModel->setAccountVoiceChannel(instance->accountId(), channelId);
 #ifndef ACHERON_NO_VOICE
-                updateVoiceStatusLabel();
+                updateVoicePanel();
 #endif
             });
 
 #ifndef ACHERON_NO_VOICE
     connect(instance->voice(), &Core::Audio::VoiceManager::voiceStateChanged,
-            this, &MainWindow::updateVoiceStatusLabel);
+            this, &MainWindow::updateVoicePanel);
 
     connect(instance->voice(), &Core::Audio::VoiceManager::channelVoiceMemberChanged,
             this, [this, instance](Core::Snowflake channelId, Core::Snowflake userId, bool joined) {
@@ -1185,10 +1188,11 @@ void MainWindow::setupUi()
     channelTree = new ChannelTreeView(this);
     channelTree->setObjectName(QStringLiteral("ChannelTree"));
 
+    userPanel = new UserPanel(this);
+    userPanel->setImageManager(session->getImageManager());
+    connect(userPanel, &UserPanel::settingsRequested, this, &MainWindow::openSettingsWindow);
 #ifndef ACHERON_NO_VOICE
-    voiceStatusBar = new VoiceStatusBar(this);
-    voiceStatusBar->setImageManager(session->getImageManager());
-    connect(voiceStatusBar, &VoiceStatusBar::disconnectRequested, this, [this]() {
+    connect(userPanel, &UserPanel::disconnectRequested, this, [this]() {
         for (const auto &inst : session->getClients()) {
             if (inst && inst->isInVoice()) {
                 inst->discord()->sendVoiceStateUpdate(inst->voiceGuildId(), Snowflake::Invalid, false, false);
@@ -1196,17 +1200,16 @@ void MainWindow::setupUi()
             }
         }
     });
-    connect(voiceStatusBar, &VoiceStatusBar::settingsRequested, this, [this]() {
-        showSettingsPage(tr("Voice & Video"));
+    connect(userPanel, &UserPanel::voiceFlagsRequested, this, [this](bool mute, bool deaf) {
+        for (const auto &inst : session->getClients()) {
+            if (inst && inst->isInVoice()) {
+                inst->discord()->sendVoiceStateUpdate(inst->voiceGuildId(), inst->voiceChannelId(), mute,
+                                                      deaf);
+                break;
+            }
+        }
     });
-    connect(voiceStatusBar, &VoiceStatusBar::userProfileRequested, this,
-            [this](Snowflake accountId, Snowflake userId) {
-                ClientInstance *instance = session->client(accountId);
-                if (!instance)
-                    return;
-                showUserProfile(instance, userId, instance->voiceGuildId());
-            });
-    connect(voiceStatusBar, &VoiceStatusBar::handToggleRequested, this, [this](bool raise) {
+    connect(userPanel, &UserPanel::handToggleRequested, this, [this](bool raise) {
         for (const auto &inst : session->getClients()) {
             if (!inst || !inst->isInVoice())
                 continue;
@@ -1217,15 +1220,6 @@ void MainWindow::setupUi()
             break;
         }
     });
-    connect(voiceStatusBar, &VoiceStatusBar::stageSpeakerRequested, this,
-            [this](Snowflake userId, bool speaker) {
-                for (const auto &inst : session->getClients()) {
-                    if (!inst || !inst->isInVoice())
-                        continue;
-                    inst->discord()->setStageSpeaker(inst->voiceGuildId(), userId, inst->voiceChannelId(), speaker);
-                    break;
-                }
-            });
 #endif
 
     serverRail = new ServerRailView(this);
@@ -1815,11 +1809,6 @@ void MainWindow::setupUi()
             session->getAnimatedImageCache(), &Core::AnimatedImageCache::setCacheLimitMiB);
     connect(settingsWindow, &SettingsWindow::animationSizeLimitChanged,
             session->getAnimatedImageCache(), &Core::AnimatedImageCache::setAnimationLimitMiB);
-#ifndef ACHERON_NO_VOICE
-    connect(settingsWindow, &SettingsWindow::voiceSettingsChanged, this, [this]() {
-        voiceStatusBar->reloadVoiceSettings();
-    });
-#endif
 
     setCentralWidget(root);
 }
@@ -1846,10 +1835,7 @@ QWidget *MainWindow::buildLeftSide()
         guildHeaderLabel->setVisible(!guildHeaderLabel->text().isEmpty());
         channelTree->show();
         v->addWidget(channelTree, 1);
-#ifndef ACHERON_NO_VOICE
-        if (voiceStatusBar)
-            v->addWidget(voiceStatusBar, 0);
-#endif
+        v->addWidget(userPanel, 0);
         h->addWidget(secondary, 1);
     } else {
         auto *v = new QVBoxLayout(container);
@@ -1869,10 +1855,7 @@ QWidget *MainWindow::buildLeftSide()
 
         channelTree->show();
         v->addWidget(channelTree, 1);
-#ifndef ACHERON_NO_VOICE
-        if (voiceStatusBar)
-            v->addWidget(voiceStatusBar, 0);
-#endif
+        v->addWidget(userPanel, 0);
     }
 
     container->setMinimumWidth(200);
@@ -1882,7 +1865,6 @@ QWidget *MainWindow::buildLeftSide()
 void MainWindow::showLoginScreen()
 {
     shellPages->setCurrentWidget(loginView);
-    menuBar()->setVisible(false);
     loginView->showQrPage();
 }
 
@@ -1891,7 +1873,6 @@ void MainWindow::showAddAccountScreen()
     // Discord adds accounts in the window it already runs in, so the login
     // screen takes the shell over instead of opening a side dialog.
     shellPages->setCurrentWidget(loginView);
-    menuBar()->setVisible(false);
     loginView->showTokenPage();
 }
 
@@ -1903,7 +1884,6 @@ void MainWindow::hideLoginScreen()
 void MainWindow::hideOverlayScreen()
 {
     shellPages->setCurrentIndex(0);
-    menuBar()->setVisible(true);
 }
 
 void MainWindow::showSettingsPage(const QString &page)
@@ -1913,7 +1893,6 @@ void MainWindow::showSettingsPage(const QString &page)
 #endif
 
     shellPages->setCurrentWidget(settingsWindow);
-    menuBar()->setVisible(false);
     settingsWindow->openPage(page.isEmpty() ? tr("My Account") : page);
 }
 
@@ -1954,9 +1933,6 @@ void MainWindow::setChannelListMode(ChannelListMode mode)
     applyChannelIndent();
 
     QList<int> splitterSizes = mainSplitter ? mainSplitter->sizes() : QList<int>();
-#ifndef ACHERON_NO_VOICE
-    bool voiceVisible = voiceStatusBar && voiceStatusBar->isVisible();
-#endif
 
     channelTree->setParent(this);
     channelTree->hide();
@@ -1964,12 +1940,8 @@ void MainWindow::setChannelListMode(ChannelListMode mode)
     serverRail->hide();
     guildHeaderLabel->setParent(this);
     guildHeaderLabel->hide();
-#ifndef ACHERON_NO_VOICE
-    if (voiceStatusBar) {
-        voiceStatusBar->setParent(this);
-        voiceStatusBar->hide();
-    }
-#endif
+    userPanel->setParent(this);
+    userPanel->hide();
 
     QWidget *newLeft = buildLeftSide();
     QWidget *old = mainSplitter->replaceWidget(0, newLeft);
@@ -1992,10 +1964,7 @@ void MainWindow::setChannelListMode(ChannelListMode mode)
         mainSplitter->setSizes(splitterSizes);
     }
 
-#ifndef ACHERON_NO_VOICE
-    if (voiceStatusBar)
-        voiceStatusBar->setVisible(voiceVisible);
-#endif
+    userPanel->show();
 
     if (mode == ChannelListMode::Tree) {
         channelTree->setRootIndex({});
@@ -2270,10 +2239,63 @@ void MainWindow::recordLastViewedChannel(Snowflake accountId, Snowflake guildId,
     lastViewedChannel.insert(guildChannelKey(accountId, guildId), channelId);
 }
 
+void MainWindow::refreshUserPanelIdentity()
+{
+    if (!userPanel)
+        return;
+
+    if (!currentInstance) {
+        userPanel->setSelf(QString(), QString(), QUrl(), Core::Snowflake(), Core::PresenceBadge());
+        return;
+    }
+
+    const Core::Snowflake selfId = currentInstance->accountId();
+    const Core::AccountInfo &info = currentInstance->accountInfo();
+
+    QString name = info.displayName.isEmpty() ? info.username : info.displayName;
+    QUrl avatar;
+
+    const std::optional<Discord::User> self = currentInstance->users()->getUser(selfId);
+    if (self) {
+        const QString global = self->getDisplayName();
+        if (!global.isEmpty())
+            name = global;
+        avatar = currentInstance->users()->getAvatarUrl(*self, Core::Snowflake::Invalid, 64);
+    }
+
+    const Core::PresenceBadge badge = currentInstance->presences()->badge(selfId);
+
+    QString status;
+    switch (badge.status) {
+    case Discord::StatusType::ONLINE:
+        status = tr("Online");
+        break;
+    case Discord::StatusType::IDLE:
+        status = tr("Idle");
+        break;
+    case Discord::StatusType::DND:
+        status = tr("Do Not Disturb");
+        break;
+    case Discord::StatusType::INVISIBLE:
+        status = tr("Invisible");
+        break;
+    default:
+        status = currentInstance->state() == Core::ConnectionState::Connecting
+                         ? tr("Connecting...")
+                         : tr("Offline");
+        break;
+    }
+
+    userPanel->setSelf(name, status, avatar, selfId, badge);
+}
+
 #ifndef ACHERON_NO_VOICE
-void MainWindow::updateVoiceStatusLabel()
+void MainWindow::updateVoicePanel()
 {
     using VState = Discord::Voice::VoiceClient::State;
+
+    if (!userPanel)
+        return;
 
     // Find any account that is in voice or has an active voice client
     Core::ClientInstance *voiceInstance = nullptr;
@@ -2284,64 +2306,40 @@ void MainWindow::updateVoiceStatusLabel()
         }
     }
 
-    Core::Audio::VoiceManager *vm = voiceInstance ? voiceInstance->voice() : nullptr;
-    voiceStatusBar->setVoiceManager(vm);
-    voiceStatusBar->setAccount(voiceInstance ? voiceInstance->accountId() : Core::Snowflake());
-
-    if (voiceInstance) {
-        QPointer<Core::UserManager> um = voiceInstance->users();
-        Core::Snowflake vGuildId = voiceInstance->voiceGuildId();
-        voiceStatusBar->setNameResolver([um, vGuildId](Core::Snowflake userId) -> QString {
-            if (!um)
-                return QString::number(userId);
-            return um->getDisplayName(userId, vGuildId);
-        });
-        voiceStatusBar->setAvatarResolver([um, vGuildId](Core::Snowflake userId) -> QUrl {
-            if (!um)
-                return {};
-            auto user = um->getUser(userId);
-            if (!user)
-                return {};
-            return um->getAvatarUrl(*user, vGuildId, 32);
-        });
-
-        QPointer<Core::PresenceManager> pm = voiceInstance->presences();
-        voiceStatusBar->setStatusResolver([pm](Core::Snowflake userId) -> Core::PresenceBadge {
-            if (!pm)
-                return {};
-            return pm->badge(userId);
-        });
-    } else {
-        voiceStatusBar->setNameResolver(nullptr);
-        voiceStatusBar->setAvatarResolver(nullptr);
-        voiceStatusBar->setStatusResolver(nullptr);
-    }
-
-    QString channelName;
-    if (voiceInstance) {
-        Core::Snowflake vcId = voiceInstance->voiceChannelId();
-        if (vcId.isValid()) {
-            ChannelNode *node = channelTreeModel->findChannelTreeNode(vcId);
-            if (node) {
-                bool isDm = (node->type == ChannelNode::Type::DMChannel);
-                channelName = isDm ? node->name : ("#" + node->name);
-            } else {
-                channelName = QString::number(vcId);
-            }
-        }
-    }
-    voiceStatusBar->setChannelName(channelName);
-
+    userPanel->setVoiceManager(voiceInstance ? voiceInstance->voice() : nullptr);
+    QString label;
     bool isStage = false;
+
     if (voiceInstance) {
         const Core::Snowflake vcId = voiceInstance->voiceChannelId();
+        QString channelName;
         if (vcId.isValid()) {
-            auto channel = voiceInstance->getChannel(vcId);
+            ChannelNode *node = channelTreeModel->findChannelTreeNode(vcId);
+            if (node)
+                channelName = node->type == ChannelNode::Type::DMChannel ? node->name
+                                                                        : ("#" + node->name);
+            else
+                channelName = QString::number(vcId);
+
+            const auto channel = voiceInstance->getChannel(vcId);
             isStage = channel && channel->type.hasValue() &&
                       channel->type.get() == Discord::ChannelType::GUILD_STAGE_VOICE;
         }
+
+        QString guildName;
+        const auto guild = voiceInstance->getGuild(voiceInstance->voiceGuildId());
+        if (guild)
+            guildName = guild->name.get();
+
+        if (!channelName.isEmpty() && !guildName.isEmpty())
+            label = channelName + QStringLiteral(" / ") + guildName;
+        else
+            label = channelName;
     }
-    voiceStatusBar->setStageChannelVisible(isStage);
+
+    userPanel->setChannelLabel(label);
+    userPanel->setStageMode(isStage);
+    userPanel->updateConnectionState();
 }
 #endif
 
@@ -2709,30 +2707,30 @@ void MainWindow::restoreWindowState()
 
 void MainWindow::setupMenu()
 {
-    auto *menuBar = this->menuBar();
-    QMenu *viewMenu = menuBar->addMenu(tr("&View"));
-    auto *addAccountAction = new QAction(tr("&Add Account"), this);
-    connect(addAccountAction, &QAction::triggered, this, &MainWindow::showAddAccountScreen);
-    viewMenu->addAction(addAccountAction);
+    // Discord has no menu bar at all: the commands people used to find there live
+    // in the settings overlay, the bottom-left user panel and the keyboard.
+    menuBar()->setNativeMenuBar(false);
+    menuBar()->hide();
 
-    auto *settingsAction = new QAction(tr("&Settings"), this);
-    connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsWindow);
-    viewMenu->addAction(settingsAction);
-
-    viewMenu->addSeparator();
-
-    channelListToggle = viewMenu->addAction(tr("Channel &List"));
+    channelListToggle = new QAction(tr("Toggle Channel List"), this);
     channelListToggle->setCheckable(true);
     channelListToggle->setChecked(!channelListHidden);
     channelListToggle->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
     connect(channelListToggle, &QAction::toggled, this, [this](bool checked) { setChannelListHidden(!checked); });
+    addAction(channelListToggle);
 
-    memberListToggle = viewMenu->addAction(tr("&Member List"));
+    memberListToggle = new QAction(tr("Toggle Member List"), this);
     memberListToggle->setCheckable(true);
     memberListToggle->setChecked(!memberListHidden);
     memberListToggle->setEnabled(false);
     memberListToggle->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
     connect(memberListToggle, &QAction::toggled, this, [this](bool checked) { setMemberListHidden(!checked); });
+    addAction(memberListToggle);
+
+    auto *settingsShortcut = new QAction(tr("User Settings"), this);
+    settingsShortcut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    connect(settingsShortcut, &QAction::triggered, this, &MainWindow::openSettingsWindow);
+    addAction(settingsShortcut);
 
     auto *emojiPickerShortcut = new QAction(this);
     emojiPickerShortcut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
