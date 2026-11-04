@@ -63,11 +63,17 @@ void FriendAvatar::paintEvent(QPaintEvent *)
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     const QRectF body = rect();
-    if (pixmap() && !pixmap()->isNull()) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QPixmap icon = pixmap();
+#else
+    const QPixmap *stored = pixmap();
+    const QPixmap icon = stored ? *stored : QPixmap();
+#endif
+    if (!icon.isNull()) {
         QPainterPath circle;
         circle.addEllipse(body);
         painter.setClipPath(circle);
-        painter.drawPixmap(body.toRect(), *pixmap());
+        painter.drawPixmap(body.toRect(), icon);
         painter.setClipping(false);
     } else {
         painter.setPen(Qt::NoPen);
