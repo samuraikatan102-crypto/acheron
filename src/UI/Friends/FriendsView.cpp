@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QAction>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -28,6 +29,7 @@
 #include "Core/RelationshipManager.hpp"
 #include "Core/Result.hpp"
 #include "Core/Session.hpp"
+#include "Core/UserManager.hpp"
 #include "Discord/CdnUrls.hpp"
 #include "Discord/Client.hpp"
 
@@ -79,24 +81,6 @@ QString describeActivity(const Discord::Activity &activity)
     return word + QStringLiteral(" ") + name;
 }
 
-QString statusWord(const Core::PresenceBadge &badge)
-{
-    using Discord::StatusType;
-
-    switch (badge.status) {
-    case StatusType::ONLINE:
-        return translated("Online");
-    case StatusType::IDLE:
-        return translated("Idle");
-    case StatusType::DND:
-        return translated("Do Not Disturb");
-    case StatusType::INVISIBLE:
-        return translated("Invisible");
-    default:
-        return translated("Offline");
-    }
-}
-
 } // namespace
 
 FriendsView::FriendsView(Core::Session *owner, QWidget *parent)
@@ -129,7 +113,13 @@ void FriendsView::buildUi()
     auto *title = new QLabel(translated("Friends"), header);
     title->setObjectName(QStringLiteral("FriendsTitle"));
     headerLayout->addWidget(title, 0);
-    headerLayout->addSpacing(12);
+
+    auto *dividerLine = new QFrame(header);
+    dividerLine->setObjectName(QStringLiteral("FriendsDivider"));
+    dividerLine->setFrameShape(QFrame::VLine);
+    dividerLine->setFixedHeight(16);
+    headerLayout->addWidget(dividerLine, 0);
+    headerLayout->addSpacing(8);
 
     struct Spec
     {
@@ -139,11 +129,11 @@ void FriendsView::buildUi()
     };
 
     const Spec specs[] = {
-        { "Add Friend", Tab::Add, "FriendsTabAdd" },
         { "All", Tab::All, "FriendsTab" },
         { "Online", Tab::Online, "FriendsTab" },
         { "Pending", Tab::Pending, "FriendsTab" },
         { "Blocked", Tab::Blocked, "FriendsTab" },
+        { "Add Friend", Tab::Add, "FriendsTabAdd" },
     };
 
     for (const Spec &spec : specs) {
@@ -162,18 +152,29 @@ void FriendsView::buildUi()
 
     headerLayout->addStretch(1);
 
-    search = new QLineEdit(header);
+    root->addWidget(header, 0);
+
+    // Discord keeps search on its own strip under the header so the tabs never
+    // have to share a row with the field.
+    searchRow = new QWidget(this);
+    searchRow->setObjectName(QStringLiteral("FriendsSearchRow"));
+    searchRow->setAttribute(Qt::WA_StyledBackground, true);
+    searchRow->setFixedHeight(48);
+    auto *searchLayout = new QHBoxLayout(searchRow);
+    searchLayout->setContentsMargins(16, 0, 16, 0);
+    searchLayout->setSpacing(8);
+
+    search = new QLineEdit(searchRow);
     search->setObjectName(QStringLiteral("FriendsSearch"));
     search->setPlaceholderText(translated("Search"));
     search->setClearButtonEnabled(true);
-    search->setFixedWidth(240);
-    headerLayout->addWidget(search, 0);
+    searchLayout->addWidget(search, 1);
     connect(search, &QLineEdit::textChanged, this, [this]() {
         if (tab != Tab::Add)
             rebuild();
     });
 
-    root->addWidget(header, 0);
+    root->addWidget(searchRow, 0);
 
     pages = new QStackedWidget(this);
 
@@ -303,7 +304,7 @@ void FriendsView::selectTab(Tab newTab)
 
     const bool adding = tab == Tab::Add;
     pages->setCurrentWidget(adding ? addPage : listPage);
-    search->setVisible(!adding);
+    searchRow->setVisible(!adding);
     activePanel->setVisible(!adding);
 
     if (adding) {
@@ -332,18 +333,44 @@ void FriendsView::clearLayout(QVBoxLayout *layout)
 
 QString FriendsView::displayNameFor(const Discord::Relationship &rel) const
 {
-    if (rel.nickname.hasValue() && !rel.nickname.isNull() && !rel.nickname.get().isEmpty())
-        return rel.nickname.get();
-
-    if (!rel.user.hasValue())
+    if (!instance)
         return QStringLiteral("unknown");
 
-    const Discord::User &user = rel.user.get();
-    if (user.globalName.hasValue() && !user.globalName.isNull() && !user.globalName.get().isEmpty())
-        return user.globalName.get();
-    if (user.username.hasValue())
-        return user.username.get();
+    Core::UserManager *users = instance->users();
+
+    const QString nickname = users->getNickname(rel.id, Core::Snowflake::Invalid);
+    if (!nickname.isEmpty())
+        return nickname;
+
+    // READY only carries the full user object for some relationship types, so the
+    // cached user record has to win over whatever the relationship payload holds.
+    if (const std::optional<Discord::User> cached = users->getUser(rel.id)) {
+        const QString name = cached->getDisplayName();
+        if (!name.isEmpty())
+            return name;
+    }
+
+    if (rel.user.hasValue()) {
+        const QString name = rel.user.get().getDisplayName();
+        if (!name.isEmpty())
+            return name;
+    }
+
     return QStringLiteral("unknown");
+}
+
+QString FriendsView::usernameFor(const Discord::Relationship &rel) const
+{
+    if (!instance)
+        return QString();
+
+    QString username;
+    if (const std::optional<Discord::User> cached = instance->users()->getUser(rel.id))
+        username = cached->username.get();
+    else if (rel.user.hasValue())
+        username = rel.user.get().username.get();
+
+    return username.isEmpty() ? QString() : QStringLiteral("@") + username;
 }
 
 QList<Discord::Relationship> FriendsView::relationshipsForCurrentTab() const
@@ -437,11 +464,53 @@ void FriendsView::rebuild()
         break;
     }
 
-    auto *section = new QLabel(QStringLiteral("%1 %2 %3")
-                                       .arg(heading, QString(QChar(0x2014)), QString::number(list.size())),
-                               listPage);
-    section->setObjectName(QStringLiteral("FriendSection"));
-    listLayout->addWidget(section, 0);
+    const auto isOnline = [this](const Discord::Relationship &rel) {
+        const Discord::StatusType status = instance->presences()->badge(rel.id).status;
+        return status == Discord::StatusType::ONLINE || status == Discord::StatusType::IDLE;
+    };
+
+    auto appendRow = [this](const Discord::Relationship &rel) {
+        auto *row = new FriendRow(listPage);
+        const QString display = displayNameFor(rel);
+        names.insert(rel.id, display);
+
+        row->setIdentity(rel.id, display, usernameFor(rel));
+
+        std::optional<Discord::User> cached = instance->users()->getUser(rel.id);
+        if (!cached && rel.user.hasValue())
+            cached = rel.user.get();
+        if (cached) {
+            const QString hash = (cached->avatar.hasValue() && !cached->avatar.isNull())
+                                         ? cached->avatar.get()
+                                         : QString();
+            const QUrl url = Discord::Cdn::userAvatar(rel.id, hash, AvatarRequestSize);
+            avatars.insert(rel.id, url);
+            session->getImageManager()->assign(row->avatar(), url,
+                                               QSize(AvatarRequestSize, AvatarRequestSize),
+                                               instance->accountId());
+        }
+
+        rows.insert(rel.id, row);
+        listLayout->addWidget(row, 0);
+
+        connect(row, &FriendRow::messageClicked, this, &FriendsView::directMessageRequested);
+        connect(row, &FriendRow::menuRequested, this, &FriendsView::showRowMenu);
+    };
+
+    // Discord groups the list under section headers that carry their own count.
+    auto addSection = [this, appendRow](const QString &title,
+                                        const QList<Discord::Relationship> &group) {
+        if (group.isEmpty())
+            return;
+
+        auto *label = new QLabel(QStringLiteral("%1  %2").arg(title, QString::number(group.size())),
+                                 listPage);
+        label->setObjectName(QStringLiteral("FriendSection"));
+        listLayout->addWidget(label, 0);
+
+        for (const Discord::Relationship &rel : group)
+            appendRow(rel);
+    };
 
     if (list.isEmpty()) {
         auto *empty = new QLabel(tab == Tab::Blocked ? translated("You haven't blocked anyone.")
@@ -451,36 +520,20 @@ void FriendsView::rebuild()
         empty->setAlignment(Qt::AlignHCenter);
         empty->setContentsMargins(0, 32, 0, 0);
         listLayout->addWidget(empty, 0);
-    }
-
-    Core::ImageManager *images = session->getImageManager();
-
-    for (const Discord::Relationship &rel : list) {
-        auto *row = new FriendRow(listPage);
-        const QString display = displayNameFor(rel);
-        names.insert(rel.id, display);
-
-        row->setIdentity(rel.id, display,
-                         rel.user.hasValue() && rel.user->username.hasValue()
-                                 ? QStringLiteral("@") + rel.user->username.get()
-                                 : QString());
-
-        if (rel.user.hasValue()) {
-            const Discord::User &user = rel.user.get();
-            const QString hash = (user.avatar.hasValue() && !user.avatar.isNull())
-                                         ? user.avatar.get()
-                                         : QString();
-            const QUrl url = Discord::Cdn::userAvatar(rel.id, hash, AvatarRequestSize);
-            avatars.insert(rel.id, url);
-            images->assign(row->avatar(), url, QSize(AvatarRequestSize, AvatarRequestSize),
-                           instance->accountId());
+    } else if (tab == Tab::All) {
+        QList<Discord::Relationship> online;
+        QList<Discord::Relationship> everyone;
+        for (const Discord::Relationship &rel : list) {
+            if (isOnline(rel))
+                online.append(rel);
+            else
+                everyone.append(rel);
         }
 
-        rows.insert(rel.id, row);
-        listLayout->addWidget(row, 0);
-
-        connect(row, &FriendRow::messageClicked, this, &FriendsView::directMessageRequested);
-        connect(row, &FriendRow::menuRequested, this, &FriendsView::showRowMenu);
+        addSection(translated("Online"), online);
+        addSection(translated("Everyone"), everyone);
+    } else {
+        addSection(heading, list);
     }
 
     listLayout->addStretch(1);
@@ -500,7 +553,9 @@ void FriendsView::refreshPresence()
         const Discord::Activity *activity = presences->primaryActivity(it.key());
 
         it.value()->setBadge(badge);
-        it.value()->setStatusLine(activity ? describeActivity(*activity) : statusWord(badge));
+        // Discord only spells out an activity under the name; a bare status lives
+        // on the avatar dot, so an idle friend shows just their handle.
+        it.value()->setStatusLine(activity ? describeActivity(*activity) : QString());
     }
 
     refreshActiveNow();

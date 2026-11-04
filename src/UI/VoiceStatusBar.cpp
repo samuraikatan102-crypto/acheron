@@ -51,34 +51,44 @@ VoiceStatusBar::~VoiceStatusBar()
 
 void VoiceStatusBar::setupUi()
 {
-    setFixedHeight(32);
+    setFixedHeight(56);
     setCursor(Qt::PointingHandCursor);
 
     setStyleSheet("QLabel { background: transparent; }");
 
-    auto *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(10, 0, 6, 0);
-    layout->setSpacing(6);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(10, 6, 8, 6);
+    layout->setSpacing(2);
+
+    auto *top = new QHBoxLayout();
+    top->setContentsMargins(0, 0, 0, 0);
+    top->setSpacing(6);
 
     statusDot = new QLabel(this);
     statusDot->setFixedSize(8, 8);
+    top->addWidget(statusDot, 0);
 
     statusLabel = new QLabel(this);
+    top->addWidget(statusLabel, 0);
+    top->addStretch(1);
 
-    channelLabel = new QLabel(this);
-    channelLabel->setStyleSheet("QLabel { font-size: 11px; }");
+    settingsBtn = new QPushButton(tr("Voice Settings"), this);
+    settingsBtn->setCursor(Qt::PointingHandCursor);
+    connect(settingsBtn, &QPushButton::clicked, this, &VoiceStatusBar::settingsRequested);
+    top->addWidget(settingsBtn, 0);
 
     disconnectBtn = new QPushButton(this);
+    disconnectBtn->setToolTip(tr("Disconnect"));
     disconnectBtn->setFixedSize(24, 24);
     disconnectBtn->setIconSize(QSize(16, 16));
     disconnectBtn->setCursor(Qt::PointingHandCursor);
     connect(disconnectBtn, &QPushButton::clicked, this, &VoiceStatusBar::disconnectRequested);
+    top->addWidget(disconnectBtn, 0);
 
-    layout->addWidget(statusDot);
-    layout->addWidget(statusLabel);
-    layout->addWidget(channelLabel);
-    layout->addStretch();
-    layout->addWidget(disconnectBtn);
+    layout->addLayout(top, 0);
+
+    channelLabel = new QLabel(this);
+    layout->addWidget(channelLabel, 0);
 
     refreshThemeColors();
 }
@@ -89,6 +99,13 @@ void VoiceStatusBar::refreshThemeColors()
 
     channelLabel->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 11px; }")
                                         .arg(theme.color(Core::Theme::Token::PlaceholderText).name()));
+
+    settingsBtn->setStyleSheet(
+            QStringLiteral("QPushButton { background: transparent; border: none; color: %1;"
+                           "  font-size: 11px; font-weight: bold; }"
+                           "QPushButton:hover { color: %2; }")
+                    .arg(theme.color(Core::Theme::Token::PlaceholderText).name(),
+                         theme.color(Core::Theme::Token::BrightText).name()));
 
     const QColor errorColor = theme.color(Core::Theme::Token::StatusDnd);
     disconnectBtn->setIcon(makeXIcon(errorColor));
@@ -219,24 +236,18 @@ void VoiceStatusBar::updateConnectionState()
 
     setVisible(active);
 
-    if (active && wasDisconnected) {
+    // Discord never pops a second window when you join a call, so the panel only
+    // closes itself once the connection is gone.
+    if (active)
         closeTimer.stop();
-        showVoiceWindow();
-        if (voiceWindow)
-            voiceWindow->refreshDevices();
-    } else if (active) {
-        closeTimer.stop();
-    }
-
-    if (!active && voiceWindow)
+    else if (voiceWindow)
         closeTimer.start();
-
-    wasDisconnected = !active;
 }
 
 void VoiceStatusBar::mousePressEvent(QMouseEvent *event)
 {
-    if (disconnectBtn->geometry().contains(event->pos())) {
+    QWidget *hit = childAt(event->pos());
+    if (hit == disconnectBtn || hit == settingsBtn) {
         QWidget::mousePressEvent(event);
         return;
     }

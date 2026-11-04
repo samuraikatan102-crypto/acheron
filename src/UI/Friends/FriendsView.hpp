@@ -59,6 +59,7 @@ private:
 
     [[nodiscard]] QList<Discord::Relationship> relationshipsForCurrentTab() const;
     [[nodiscard]] QString displayNameFor(const Discord::Relationship &rel) const;
+    [[nodiscard]] QString usernameFor(const Discord::Relationship &rel) const;
     void setStatusText(const QString &text);
 
     Core::Session *session;
@@ -68,6 +69,7 @@ private:
     QStackedWidget *pages = nullptr;
     QWidget *listPage = nullptr;
     QWidget *addPage = nullptr;
+    QWidget *searchRow = nullptr;
     QVBoxLayout *listLayout = nullptr;
     QVBoxLayout *activeLayout = nullptr;
     QWidget *activePanel = nullptr;

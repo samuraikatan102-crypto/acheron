@@ -49,6 +49,7 @@ public:
 
 signals:
     void disconnectRequested();
+    void settingsRequested();
     void handToggleRequested(bool raise);
     void stageSpeakerRequested(Core::Snowflake userId, bool speaker);
     void userProfileRequested(Core::Snowflake accountId, Core::Snowflake userId);
@@ -74,11 +75,11 @@ private:
     QLabel *statusDot;
     QLabel *statusLabel;
     QLabel *channelLabel;
+    QPushButton *settingsBtn;
     QPushButton *disconnectBtn;
 
     QPointer<VoiceWindow> voiceWindow;
     QTimer closeTimer;
-    bool wasDisconnected = true;
     bool stageMode = false;
 };
 

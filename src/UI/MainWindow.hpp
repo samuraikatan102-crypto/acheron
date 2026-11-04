@@ -35,7 +35,6 @@ class ForumPostModel;
 class ThreadBrowserPopup;
 class ChannelTreeModel;
 class ChannelFilterProxyModel;
-class AccountsWindow;
 class AccountsModel;
 class LoginView;
 class SettingsWindow;
@@ -124,6 +123,10 @@ private:
     QWidget *buildLeftSide();
     void showLoginScreen();
     void hideLoginScreen();
+    void showAddAccountScreen();
+    void hideOverlayScreen();
+    void showSettingsPage(const QString &page);
+    void logOutAccount(Core::Snowflake accountId);
     void onAccountLoggedIn(Core::Snowflake accountId);
     void onRailAccountHomeSelected(Core::Snowflake accountId);
     void onRailAccountHomeClicked(Core::Snowflake accountId);
@@ -242,7 +245,6 @@ private:
 #ifndef ACHERON_NO_VOICE
     VoiceStatusBar *voiceStatusBar;
 #endif
-    AccountsWindow *accountsWindow = nullptr;
     LoginView *loginView = nullptr;
     QStackedLayout *shellPages = nullptr;
     SettingsWindow *settingsWindow = nullptr;
@@ -250,7 +252,6 @@ private:
     QHash<QPair<Core::Snowflake, Core::Snowflake>, QPointer<GuildSettingsWindow>> guildSettingsWindows;
 
 private slots:
-    void openAccountsWindow();
     void openSettingsWindow();
     void applyCloseToTray();
     void showFromTray();

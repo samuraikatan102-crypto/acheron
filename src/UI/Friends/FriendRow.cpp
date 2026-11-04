@@ -20,7 +20,7 @@ namespace {
 
 constexpr int AvatarSize = 32;
 constexpr int ButtonSize = 32;
-constexpr int RowHeight = 48;
+constexpr int RowHeight = 64;
 
 QColor themeColor(Core::Theme::Token token)
 {
@@ -98,29 +98,26 @@ FriendRow::FriendRow(QWidget *parent) : QWidget(parent)
 
     auto *text = new QVBoxLayout();
     text->setContentsMargins(0, 0, 0, 0);
-    text->setSpacing(2);
+    text->setSpacing(1);
 
-    auto *nameRow = new QHBoxLayout();
-    nameRow->setContentsMargins(0, 0, 0, 0);
-    nameRow->setSpacing(6);
     nameLabel = new QLabel(this);
     nameLabel->setObjectName(QStringLiteral("FriendName"));
-    nameRow->addWidget(nameLabel, 0);
+    text->addWidget(nameLabel, 0);
+
     handleLabel = new QLabel(this);
     handleLabel->setObjectName(QStringLiteral("FriendHandle"));
-    nameRow->addWidget(handleLabel, 0);
-    nameRow->addStretch(1);
-    text->addLayout(nameRow);
+    text->addWidget(handleLabel, 0);
 
     statusLabel = new QLabel(this);
     statusLabel->setObjectName(QStringLiteral("FriendStatusLine"));
     statusLabel->setTextInteractionFlags(Qt::NoTextInteraction);
+    statusLabel->hide();
     text->addWidget(statusLabel, 0);
 
     layout->addLayout(text, 1);
 
-    // The buttons only appear on hover, so they live in a fixed-width box: hiding
-    // them must not let the name and status columns jump sideways.
+    // The buttons sit in a fixed-width box so the name and status columns never
+    // shift sideways when a row changes shape.
     auto *actions = new QWidget(this);
     actions->setFixedWidth(ButtonSize * 2 + 8);
     auto *actionsLayout = new QHBoxLayout(actions);
@@ -136,7 +133,6 @@ FriendRow::FriendRow(QWidget *parent) : QWidget(parent)
     messageButton->setIconSize(QSize(18, 18));
     messageButton->setCursor(Qt::PointingHandCursor);
     messageButton->setToolTip(tr("Send Message"));
-    messageButton->hide();
 
     menuButton = new QToolButton(actions);
     menuButton->setObjectName(QStringLiteral("FriendActionButton"));
@@ -147,7 +143,6 @@ FriendRow::FriendRow(QWidget *parent) : QWidget(parent)
     menuButton->setIconSize(QSize(18, 18));
     menuButton->setCursor(Qt::PointingHandCursor);
     menuButton->setToolTip(tr("More"));
-    menuButton->hide();
 
     actionsLayout->addWidget(messageButton, 0);
     actionsLayout->addWidget(menuButton, 0);
@@ -167,11 +162,13 @@ void FriendRow::setIdentity(Core::Snowflake userId, const QString &name, const Q
     nameLabel->setText(name);
     nameLabel->setToolTip(name);
     handleLabel->setText(handle);
+    handleLabel->setVisible(!handle.isEmpty());
 }
 
 void FriendRow::setStatusLine(const QString &text)
 {
     statusLabel->setText(text);
+    statusLabel->setVisible(!text.isEmpty());
 }
 
 void FriendRow::setBadge(const Core::PresenceBadge &newBadge)
@@ -200,8 +197,6 @@ void FriendRow::setHovered(bool isHovered)
         return;
     hovered = isHovered;
     avatarLabel->setRingColor(themeColor(Core::Theme::Token::BaseBg).lighter(isHovered ? 112 : 100));
-    messageButton->setVisible(isHovered);
-    menuButton->setVisible(isHovered);
     update();
 }
 

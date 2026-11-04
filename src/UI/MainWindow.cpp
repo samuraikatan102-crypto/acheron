@@ -33,7 +33,6 @@
 #include "ChannelList/ServerRailModel.hpp"
 #include "ChannelList/ServerRailDelegate.hpp"
 #include "TabBar/TabBar.hpp"
-#include "Accounts/AccountsWindow.hpp"
 #include "Settings/SettingsWindow.hpp"
 #include "GuildSettings/GuildSettingsWindow.hpp"
 #include "GuildSettings/MemberModeration.hpp"
@@ -1137,9 +1136,7 @@ void MainWindow::setupPermanentConnections(Core::ClientInstance *instance)
                 connectionBanner->hide();
                 const QString accountLabel = info.displayName.isEmpty() ? info.username
                                                                         : info.displayName;
-                QWidget *parent = (accountsWindow && accountsWindow->isVisible())
-                                          ? static_cast<QWidget *>(accountsWindow)
-                                          : static_cast<QWidget *>(this);
+                QWidget *parent = this;
                 auto *box = new QMessageBox(parent);
                 box->setAttribute(Qt::WA_DeleteOnClose);
                 box->setIcon(QMessageBox::Critical);
@@ -1198,6 +1195,9 @@ void MainWindow::setupUi()
                 break;
             }
         }
+    });
+    connect(voiceStatusBar, &VoiceStatusBar::settingsRequested, this, [this]() {
+        showSettingsPage(tr("Voice & Video"));
     });
     connect(voiceStatusBar, &VoiceStatusBar::userProfileRequested, this,
             [this](Snowflake accountId, Snowflake userId) {
@@ -1784,6 +1784,43 @@ void MainWindow::setupUi()
     shellPages->addWidget(loginView);
     connect(loginView, &LoginView::loggedIn, this, &MainWindow::onAccountLoggedIn);
 
+    // User Settings is a page of the same window, like Discord: it slides over
+    // the shell and closes with the X or Escape instead of opening a dialog.
+    settingsWindow = new SettingsWindow(root);
+    settingsWindow->setAccountsModel(accountsModel);
+    shellPages->addWidget(settingsWindow);
+    connect(settingsWindow, &SettingsWindow::closeRequested, this, &MainWindow::hideOverlayScreen);
+    connect(settingsWindow, &SettingsWindow::addAccountRequested, this,
+            &MainWindow::showAddAccountScreen);
+    connect(settingsWindow, &SettingsWindow::logOutRequested, this, &MainWindow::logOutAccount);
+    connect(settingsWindow, &SettingsWindow::channelListModeChanged, this,
+            [this](bool classic) { setChannelListMode(classic ? ChannelListMode::Classic : ChannelListMode::Tree); });
+    connect(settingsWindow, &SettingsWindow::channelListIndentChanged, this,
+            &MainWindow::applyChannelIndent);
+    connect(settingsWindow, &SettingsWindow::closeToTrayChanged, this, &MainWindow::applyCloseToTray);
+    connect(settingsWindow, &SettingsWindow::animateEmojiChanged, this, [this](bool enabled) {
+        chatView->frameAnimator()->setEmojiEnabled(enabled);
+        if (expressionPicker)
+            expressionPicker->setAnimationEnabled(enabled);
+    });
+    connect(settingsWindow, &SettingsWindow::animateStickersChanged, this, [this](bool enabled) {
+        chatView->frameAnimator()->setStickersEnabled(enabled);
+    });
+    connect(settingsWindow, &SettingsWindow::gifSettingsChanged, this, [this]() {
+        applyGifSettings(chatView->gifPlayback());
+        if (expressionPicker)
+            applyGifSettings(expressionPicker->gifPlayback());
+    });
+    connect(settingsWindow, &SettingsWindow::animationCacheLimitChanged,
+            session->getAnimatedImageCache(), &Core::AnimatedImageCache::setCacheLimitMiB);
+    connect(settingsWindow, &SettingsWindow::animationSizeLimitChanged,
+            session->getAnimatedImageCache(), &Core::AnimatedImageCache::setAnimationLimitMiB);
+#ifndef ACHERON_NO_VOICE
+    connect(settingsWindow, &SettingsWindow::voiceSettingsChanged, this, [this]() {
+        voiceStatusBar->reloadVoiceSettings();
+    });
+#endif
+
     setCentralWidget(root);
 }
 
@@ -1849,10 +1886,50 @@ void MainWindow::showLoginScreen()
     loginView->showQrPage();
 }
 
+void MainWindow::showAddAccountScreen()
+{
+    // Discord adds accounts in the window it already runs in, so the login
+    // screen takes the shell over instead of opening a side dialog.
+    shellPages->setCurrentWidget(loginView);
+    menuBar()->setVisible(false);
+    loginView->showTokenPage();
+}
+
 void MainWindow::hideLoginScreen()
+{
+    hideOverlayScreen();
+}
+
+void MainWindow::hideOverlayScreen()
 {
     shellPages->setCurrentIndex(0);
     menuBar()->setVisible(true);
+}
+
+void MainWindow::showSettingsPage(const QString &page)
+{
+#ifndef ACHERON_NO_VOICE
+    settingsWindow->setVoiceManager(currentInstance ? currentInstance->voice() : nullptr);
+#endif
+
+    shellPages->setCurrentWidget(settingsWindow);
+    menuBar()->setVisible(false);
+    settingsWindow->openPage(page.isEmpty() ? tr("My Account") : page);
+}
+
+void MainWindow::logOutAccount(Core::Snowflake accountId)
+{
+    session->disconnectAccount(accountId);
+
+    for (int row = 0; row < accountsModel->rowCount(); ++row) {
+        QModelIndex idx = accountsModel->index(row, 0);
+        auto *info = static_cast<Core::AccountInfo *>(
+                idx.data(AccountsModel::AccountObjectRole).value<void *>());
+        if (info && info->id == accountId) {
+            accountsModel->removeAccount(row);
+            return;
+        }
+    }
 }
 
 void MainWindow::onAccountLoggedIn(Snowflake accountId)
@@ -2634,9 +2711,9 @@ void MainWindow::setupMenu()
 {
     auto *menuBar = this->menuBar();
     QMenu *viewMenu = menuBar->addMenu(tr("&View"));
-    auto *accountsAction = new QAction(tr("&Accounts"), this);
-    connect(accountsAction, &QAction::triggered, this, &MainWindow::openAccountsWindow);
-    viewMenu->addAction(accountsAction);
+    auto *addAccountAction = new QAction(tr("&Add Account"), this);
+    connect(addAccountAction, &QAction::triggered, this, &MainWindow::showAddAccountScreen);
+    viewMenu->addAction(addAccountAction);
 
     auto *settingsAction = new QAction(tr("&Settings"), this);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsWindow);
@@ -2677,53 +2754,9 @@ void MainWindow::setupMenu()
     });
 }
 
-void MainWindow::openAccountsWindow()
-{
-    if (!accountsWindow) {
-        accountsWindow = new AccountsWindow(session, accountsModel, this);
-    }
-
-    accountsWindow->show();
-    accountsWindow->raise();
-    accountsWindow->activateWindow();
-}
-
 void MainWindow::openSettingsWindow()
 {
-    if (!settingsWindow) {
-        settingsWindow = new SettingsWindow(this);
-        connect(settingsWindow, &SettingsWindow::channelListModeChanged, this, [this](bool classic) {
-            setChannelListMode(classic ? ChannelListMode::Classic : ChannelListMode::Tree);
-        });
-        connect(settingsWindow, &SettingsWindow::channelListIndentChanged, this, &MainWindow::applyChannelIndent);
-        connect(settingsWindow, &SettingsWindow::closeToTrayChanged, this, &MainWindow::applyCloseToTray);
-        connect(settingsWindow, &SettingsWindow::animateEmojiChanged, this, [this](bool enabled) {
-            chatView->frameAnimator()->setEmojiEnabled(enabled);
-            if (expressionPicker)
-                expressionPicker->setAnimationEnabled(enabled);
-        });
-        connect(settingsWindow, &SettingsWindow::animateStickersChanged, this, [this](bool enabled) {
-            chatView->frameAnimator()->setStickersEnabled(enabled);
-        });
-        connect(settingsWindow, &SettingsWindow::gifSettingsChanged, this, [this]() {
-            applyGifSettings(chatView->gifPlayback());
-            if (expressionPicker)
-                applyGifSettings(expressionPicker->gifPlayback());
-        });
-        connect(settingsWindow, &SettingsWindow::animationCacheLimitChanged, session->getAnimatedImageCache(),
-                &Core::AnimatedImageCache::setCacheLimitMiB);
-        connect(settingsWindow, &SettingsWindow::animationSizeLimitChanged, session->getAnimatedImageCache(),
-                &Core::AnimatedImageCache::setAnimationLimitMiB);
-#ifndef ACHERON_NO_VOICE
-        connect(settingsWindow, &SettingsWindow::voiceSettingsChanged, this, [this]() {
-            voiceStatusBar->reloadVoiceSettings();
-        });
-#endif
-    }
-
-    settingsWindow->show();
-    settingsWindow->raise();
-    settingsWindow->activateWindow();
+    showSettingsPage(QString());
 }
 
 void MainWindow::applyCloseToTray()

@@ -288,7 +288,9 @@ QString buildStyleSheet()
 
     qss += QStringLiteral("QWidget#FriendsHeader { background-color: %1; border-bottom: 1px solid %2; }"
                           "QLabel#FriendsTitle { color: %3; font-size: 16px; font-weight: 600; }"
+                          "QFrame#FriendsDivider { color: %2; background-color: %2; border: none; }"
                           "QWidget#FriendsList { background-color: %1; }"
+                          "QWidget#FriendsSearchRow { background-color: %1; border-bottom: 1px solid %2; }"
                           "QLineEdit#FriendsSearch { background-color: %4; color: %5; border: none;"
                           "  border-radius: %6; padding: %7 %8; font-size: 13px; }")
                    .arg(hex(baseBg), hex(divider), hex(brightText), hex(windowBg),
@@ -309,7 +311,7 @@ QString buildStyleSheet()
                    .arg(rgba(statusOnline, 26), hex(statusOnline), px(radius + 8), px(2),
                         px(Metrics::spacing(10)), rgba(statusOnline, 48), hex(windowBg));
 
-    qss += QStringLiteral("QLabel#FriendName { color: %1; font-size: 16px; font-weight: 500; }"
+    qss += QStringLiteral("QLabel#FriendName { color: %1; font-size: 16px; font-weight: 600; }"
                           "QLabel#FriendHandle { color: %2; font-size: 13px; }"
                           "QLabel#FriendStatusLine { color: %3; font-size: 13px; }"
                           "QLabel#FriendSection { color: %1; font-size: 12px; font-weight: 600;"
@@ -339,6 +341,49 @@ QString buildStyleSheet()
                    .arg(hex(alternateBaseBg), hex(placeholderText), hex(divider),
                         px(Metrics::spacing(12)), px(Metrics::spacing(16)),
                         alternateBaseBg.lighter(118).name(QColor::HexRgb), hex(brightText));
+
+    // User Settings opens over the app like Discord's: a darker navigation rail
+    // on the left, the page on the right, and an X in the corner.
+    const QColor danger = m.color(Token::StatusDnd);
+
+    qss += QStringLiteral("QWidget#SettingsShell { background-color: %1; }"
+                          "QWidget#SettingsHeader { background-color: %1; border-bottom: 1px solid %2; }"
+                          "QLabel#SettingsTitle { color: %3; font-size: 18px; font-weight: 600; }"
+                          "QStackedWidget#SettingsPages { background-color: %1; }"
+                          "QListWidget#SettingsNav { background-color: %4; border: none; }"
+                          "QListWidget#SettingsNav::item { color: %5; padding: %6 %7; border-radius: %8; }"
+                          "QListWidget#SettingsNav::item:hover { background-color: %9; }")
+                   .arg(hex(baseBg), hex(divider), hex(brightText), hex(windowBg),
+                        hex(placeholderText), px(Metrics::spacing(8)), px(Metrics::spacing(12)),
+                        radiusPx, rgba(primaryText, 12));
+
+    qss += QStringLiteral("QListWidget#SettingsNav::item:selected { background-color: %1; color: %2; }"
+                          "QPushButton#SettingsClose { background: transparent; border: none; color: %3;"
+                          "  font-size: 15px; border-radius: %4; }"
+                          "QPushButton#SettingsClose:hover { background-color: %5; color: %6; }")
+                   .arg(hex(buttonBg), hex(buttonText), hex(placeholderText),
+                        px(radius + 8), rgba(danger, 40), hex(brightText));
+
+    qss += QStringLiteral("QLabel#SettingsPageTitle { color: %1; font-size: 16px; font-weight: 600; }"
+                          "QLabel#SettingsSectionTitle { color: %2; font-size: 12px; font-weight: 700; }"
+                          "QLabel#SettingsFieldLabel { color: %1; font-size: 12px; font-weight: 600; }"
+                          "QLabel#SettingsPageHint { color: %2; font-size: 12px; }"
+                          "QWidget#SettingsAccountCard { background-color: %3; border-radius: %4; }"
+                          "QLabel#SettingsAccountName { color: %1; font-size: 14px; }")
+                   .arg(hex(brightText), hex(placeholderText), hex(alternateBaseBg),
+                        px(radius + 4));
+
+    qss += QStringLiteral("QPushButton#SettingsPrimaryButton { background-color: %1; color: %2;"
+                          "  border: none; border-radius: %3; padding: %4 %5; font-size: 14px;"
+                          "  font-weight: 600; }"
+                          "QPushButton#SettingsPrimaryButton:hover { background-color: %6; }"
+                          "QPushButton#SettingsDangerButton { background-color: %7; color: %2;"
+                          "  border: none; border-radius: %3; padding: %4 %8; font-size: 13px;"
+                          "  font-weight: 600; }"
+                          "QPushButton#SettingsDangerButton:hover { background-color: %9; }")
+                   .arg(hex(highlight), hex(highlightedText), radiusPx, px(Metrics::spacing(6)),
+                        px(Metrics::spacing(14)), highlight.darker(115).name(QColor::HexRgb),
+                        hex(danger), px(Metrics::spacing(10)), danger.darker(115).name(QColor::HexRgb));
 
     return qss;
 }

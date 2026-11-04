@@ -216,7 +216,6 @@ set(PROJECT_SOURCES
     src/UI/ProxyLineEdit.cpp
     src/UI/ImageViewer.cpp
     src/UI/VideoFullscreenWindow.cpp
-    src/UI/Accounts/AccountsWindow.cpp
     src/UI/Settings/SettingsWindow.cpp
     src/UI/Settings/GeneralPage.cpp
     src/UI/Settings/AppearancePage.cpp
