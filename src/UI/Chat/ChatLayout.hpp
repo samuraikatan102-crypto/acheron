@@ -16,15 +16,15 @@ namespace ChatLayout {
 
 constexpr int padding() noexcept
 {
-    return 8;
+    return 16;
 }
 constexpr int blockTopPadding() noexcept
 {
-    return 14;
+    return 16;
 }
 constexpr int avatarSize() noexcept
 {
-    return 32;
+    return 40;
 }
 constexpr int separatorHeight() noexcept
 {

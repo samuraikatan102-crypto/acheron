@@ -47,6 +47,10 @@ QString buildStyleSheet()
     const QColor highlightedText = m.color(Token::HighlightedText);
     const QColor disabledText = m.color(Token::DisabledText);
     const QColor windowBg = m.color(Token::WindowBg);
+    const QColor alternateBaseBg = m.color(Token::AlternateBaseBg);
+    const QColor brightText = m.color(Token::BrightText);
+    const QColor linkText = m.color(Token::LinkText);
+    const QColor placeholderText = m.color(Token::PlaceholderText);
 
     const int radius = Metrics::cornerRadius();
     const QString radiusPx = px(radius);
@@ -74,14 +78,26 @@ QString buildStyleSheet()
 
     qss += "#MemberList QScrollBar::handle:vertical { min-height: 40px; }";
 
+    // Discord shades each pane differently, which a single palette role can't
+    // express, so the panes name their own backgrounds here.
+    qss += QStringLiteral("QListView#ServerRail { background-color: %1; }"
+                          "QWidget#GuildSidebar { background-color: %2; }"
+                          "QWidget#ChatPane { background-color: %3; }")
+                   .arg(hex(windowBg), hex(alternateBaseBg), hex(baseBg));
+
+    qss += QStringLiteral("QTreeView#ChannelTree { background-color: %1; border: none; }"
+                          "QListView#MemberList { background-color: %1; border: none; }"
+                          "QLabel#GuildHeader { background-color: %1; border-bottom: 1px solid %2; }"
+                          "QWidget#channelToolbar { background-color: %3; border-bottom: 1px solid %2; }")
+                   .arg(hex(alternateBaseBg), hex(divider), hex(baseBg));
+
     qss += QStringLiteral("#MessageInput {"
                           "  background-color: %1;"
-                          "  border: 1px solid %2;"
-                          "  border-radius: %3;"
-                          "  padding: %4 %5; }"
-                          "#MessageInput:focus { border: 1px solid %6; }")
-                   .arg(hex(baseBg), hex(divider), radiusPx, px(Metrics::spacing(8)),
-                        px(Metrics::spacing(10)), hex(highlight));
+                          "  border: none;"
+                          "  border-radius: %2;"
+                          "  padding: %3 %4; }")
+                   .arg(hex(buttonBg), px(qMax(4, radius + 2)), px(Metrics::spacing(6)),
+                        px(Metrics::spacing(10)));
 
     qss += QStringLiteral("#MessageInput QToolButton {"
                           "  background: transparent;"
@@ -178,6 +194,18 @@ QString buildStyleSheet()
                    .arg(hex(baseBg), hex(primaryText), hex(divider), radiusPx, px(Metrics::spacing(4)),
                         px(Metrics::spacing(8)), hex(highlight), hex(highlightedText));
 
+    qss += QStringLiteral("QComboBox {"
+                          "  background-color: %1;"
+                          "  color: %2;"
+                          "  border: 1px solid %3;"
+                          "  border-radius: %4;"
+                          "  padding: %5 %6; }"
+                          "QComboBox::drop-down { border: none; width: %7; }"
+                          "QComboBox QAbstractItemView { background-color: %8; color: %9; }")
+                   .arg(hex(buttonBg), hex(primaryText), hex(divider), radiusPx,
+                        px(Metrics::spacing(4)), px(Metrics::spacing(8)), px(Metrics::spacing(18)),
+                        hex(buttonBg), hex(primaryText));
+
     qss += QStringLiteral("QCheckBox::indicator, QRadioButton::indicator {"
                           "  width: %1;"
                           "  height: %1;"
@@ -191,6 +219,67 @@ QString buildStyleSheet()
                           "  background-color: %3; border-color: %3; }")
                    .arg(px(indicatorSize), hex(divider), hex(baseBg),
                         px(qMax(2, innerRadius(radius, 4))), px(indicatorSize / 2), hex(highlight));
+
+    // The sign-in card copies Discord's own layout: a shaded card, small
+    // uppercase field labels, and one blurple action.
+    qss += QStringLiteral("QWidget#LoginView { background-color: %1; }"
+                          "QWidget#LoginCard { background-color: %2; border-radius: %3; }"
+                          "QStackedWidget#LoginStack { background: transparent; }")
+                   .arg(hex(windowBg), hex(baseBg), px(radius + 4));
+
+    qss += QStringLiteral("QLabel#LoginTitle { font-size: 22px; font-weight: 700; color: %1; }"
+                          "QLabel#LoginSubtitle { font-size: 14px; color: %2; }"
+                          "QLabel#LoginFieldLabel { font-size: 11px; font-weight: 700; color: %3; }"
+                          "QLabel#LoginStatus { font-size: 13px; color: %4; }")
+                   .arg(hex(brightText), hex(placeholderText), hex(placeholderText),
+                        hex(placeholderText));
+
+    qss += QStringLiteral("QLineEdit#LoginInput, QComboBox#LoginInput {"
+                          "  background-color: %1;"
+                          "  color: %2;"
+                          "  border: 1px solid %3;"
+                          "  border-radius: %4;"
+                          "  padding: %5 %6;"
+                          "  font-size: 16px; }"
+                          "QLineEdit#LoginInput:focus, QComboBox#LoginInput:focus {"
+                          "  border: 1px solid %7; }")
+                   .arg(hex(windowBg), hex(primaryText), hex(divider), radiusPx,
+                        px(Metrics::spacing(8)), px(Metrics::spacing(12)), hex(highlight));
+
+    qss += QStringLiteral("QPushButton#LoginPrimary {"
+                          "  background-color: %1;"
+                          "  color: %2;"
+                          "  border: none;"
+                          "  border-radius: %3;"
+                          "  padding: %4 %5;"
+                          "  font-size: 16px;"
+                          "  font-weight: 600; }"
+                          "QPushButton#LoginPrimary:hover { background-color: %6; }"
+                          "QPushButton#LoginPrimary:pressed { background-color: %7; }"
+                          "QPushButton#LoginPrimary:disabled { background-color: %8; color: %9; }")
+                   .arg(hex(highlight), hex(highlightedText), radiusPx, px(Metrics::spacing(10)),
+                        px(Metrics::spacing(16)), highlight.darker(115).name(QColor::HexRgb),
+                        highlight.darker(125).name(QColor::HexRgb), hex(buttonBg),
+                        hex(disabledText));
+
+    qss += QStringLiteral("QPushButton#LoginSecondary {"
+                          "  background-color: %1;"
+                          "  color: %2;"
+                          "  border: none;"
+                          "  border-radius: %3;"
+                          "  padding: %4 %5; }"
+                          "QPushButton#LoginSecondary:hover { background-color: %6; }"
+                          "QPushButton#LoginLink { background: transparent; border: none;"
+                          "  color: %7; font-size: 13px; }"
+                          "QPushButton#LoginLink:hover { text-decoration: underline; }"
+                          "QPushButton#LoginLink:disabled { color: %8; }"
+                          "QLabel#LoginQr { background-color: white; border-radius: %9; }")
+                   .arg(hex(buttonBg), hex(buttonText), radiusPx, px(Metrics::spacing(8)),
+                        px(Metrics::spacing(14)), buttonBg.lighter(118).name(QColor::HexRgb),
+                        hex(linkText), hex(disabledText), radiusPx);
+
+    qss += QStringLiteral("QFrame#LoginDivider { color: %1; background-color: %2; }")
+                   .arg(hex(divider), hex(divider));
 
     return qss;
 }

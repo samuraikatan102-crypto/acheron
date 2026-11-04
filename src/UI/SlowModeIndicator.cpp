@@ -14,7 +14,7 @@ SlowModeIndicator::SlowModeIndicator(QWidget *parent) : QWidget(parent)
 
     label = new QLabel(this);
     label->setTextFormat(Qt::PlainText);
-    label->setStyleSheet("font-size: 12px; color: #b5bac1;");
+    label->setStyleSheet(QStringLiteral("font-size: 12px; color: palette(placeholder-text);"));
     layout->addWidget(label);
 
     label->setVisible(false);

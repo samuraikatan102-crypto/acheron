@@ -341,7 +341,7 @@ QVariant ChatModel::data(const QModelIndex &index, int role) const
     case UsernameRole:
         return resolveAuthorName(msg.author.get());
     case AvatarRole: {
-        const QSize desiredSize(32, 32);
+        const QSize desiredSize(48, 48);
 
         if (!avatarUrlResolver)
             return imageManager->placeholder(desiredSize);

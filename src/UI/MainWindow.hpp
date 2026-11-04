@@ -37,6 +37,7 @@ class ChannelTreeModel;
 class ChannelFilterProxyModel;
 class AccountsWindow;
 class AccountsModel;
+class LoginView;
 class SettingsWindow;
 class ChannelDelegate;
 class ChannelTreeView;
@@ -120,6 +121,9 @@ private:
     void openChannelTopicPopup();
     void showUserProfile(Core::ClientInstance *instance, Core::Snowflake userId, Core::Snowflake guildId, QWidget *aboveModalPopup = nullptr);
     QWidget *buildLeftSide();
+    void showLoginScreen();
+    void hideLoginScreen();
+    void onAccountLoggedIn(Core::Snowflake accountId);
     void onRailAccountHomeSelected(Core::Snowflake accountId);
     void onRailAccountHomeClicked(Core::Snowflake accountId);
     void onRailGuildSelected(Core::Snowflake accountId, Core::Snowflake guildId);
@@ -235,6 +239,8 @@ private:
     VoiceStatusBar *voiceStatusBar;
 #endif
     AccountsWindow *accountsWindow = nullptr;
+    LoginView *loginView = nullptr;
+    QStackedLayout *shellPages = nullptr;
     SettingsWindow *settingsWindow = nullptr;
     TrayIcon *trayIcon = nullptr;
     QHash<QPair<Core::Snowflake, Core::Snowflake>, QPointer<GuildSettingsWindow>> guildSettingsWindows;

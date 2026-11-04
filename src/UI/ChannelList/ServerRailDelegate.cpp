@@ -10,7 +10,7 @@ namespace UI {
 
 namespace {
 
-constexpr int IconSize = 38;
+constexpr int IconSize = 48;
 constexpr int FolderGroupAlpha = 64;
 
 QString initialsFor(const QString &name)
@@ -92,11 +92,11 @@ void drawFolderGlyph(QPainter *painter, const QRect &iconRect, const QColor &col
     painter->restore();
 }
 
-void drawLeftIndicator(QPainter *painter, const QStyleOptionViewItem &option, int iconSize, bool selected, bool unread)
+void drawLeftIndicator(QPainter *painter, const QStyleOptionViewItem &option, bool selected, bool unread)
 {
     int pillH = 0;
     if (selected)
-        pillH = iconSize;
+        pillH = 40;
     else if (unread)
         pillH = 8;
     if (pillH == 0)
@@ -125,7 +125,7 @@ void drawMentionBadge(QPainter *painter, const QStyleOptionViewItem &option, con
     QRect badge(iconRect.right() - badgeW + 6, iconRect.bottom() - badgeH + 6, badgeW, badgeH);
 
     painter->setPen(Qt::NoPen);
-    painter->setBrush(option.palette.base().color());
+    painter->setBrush(option.palette.window().color());
     painter->drawRoundedRect(badge.adjusted(-2, -2, 2, 2), (badgeH + 4) / 2.0, (badgeH + 4) / 2.0);
 
     painter->setBrush(option.palette.highlight().color());
@@ -170,11 +170,14 @@ void ServerRailDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter->setRenderHint(QPainter::TextAntialiasing, true);
 
-    painter->fillRect(option.rect, option.palette.base());
+    // the rail is the darkest pane, so it paints with the window colour the
+    // stylesheet gives it instead of the chat base
+    painter->fillRect(option.rect, option.palette.window());
 
     const auto kind = static_cast<ServerRailModel::Kind>(index.data(ServerRailModel::KindRole).toInt());
     const bool isFirst = index.data(ServerRailModel::IsFirstOfAccountRole).toBool();
     const bool selected = index.data(ServerRailModel::IsSelectedRole).toBool();
+    const bool hovered = option.state & QStyle::State_MouseOver;
     const bool muted = index.data(ServerRailModel::IsMutedRole).toBool();
     const bool unread = index.data(ServerRailModel::IsUnreadRole).toBool() && !muted;
     const int mentions = index.data(ServerRailModel::MentionCountRole).toInt();
@@ -195,9 +198,10 @@ void ServerRailDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     const int y = option.rect.top() + (option.rect.height() - iconSize) / 2;
     const QRect iconRect(x, y, iconSize, iconSize);
 
+    // Discord squares the icon off at rest and rounds it into a circle on hover
     qreal radius = (kind == ServerRailModel::Kind::AccountHome) ? iconSize / 2.0 : 16.0;
-    if (selected && kind != ServerRailModel::Kind::AccountHome)
-        radius = iconSize * 0.30;
+    if ((selected || hovered) && kind != ServerRailModel::Kind::AccountHome)
+        radius = iconSize / 2.0;
 
     const bool isFolder = kind == ServerRailModel::Kind::Folder;
     if (isFolder || inFolderGroup) {
@@ -218,7 +222,7 @@ void ServerRailDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
         fillGroupBackground(painter, bg, groupColor, isGroupTop, isGroupBottom, 16.0);
     }
 
-    drawLeftIndicator(painter, option, iconSize, selected, unread);
+    drawLeftIndicator(painter, option, selected, unread);
 
     if (isFolder) {
         const QVariant colorVar = index.data(ServerRailModel::FolderColorRole);
@@ -252,7 +256,7 @@ void ServerRailDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
             drawRoundedPixmap(painter, iconRect, icon, radius);
         else {
             QColor bg = monogramColor(name, option.palette);
-            if (!selected)
+            if (!selected && !hovered)
                 bg.setAlpha(110);
             drawMonogram(painter, iconRect, initialsFor(name), bg, radius);
         }

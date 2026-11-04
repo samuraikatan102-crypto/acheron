@@ -36,6 +36,7 @@
 #include "GuildSettings/GuildSettingsWindow.hpp"
 #include "GuildSettings/MemberModeration.hpp"
 #include "Accounts/AccountsModel.hpp"
+#include "UI/Login/LoginView.hpp"
 #include "Core/ClientInstance.hpp"
 #include "Core/AccountInfo.hpp"
 #include "Core/Emoji/EmojiManager.hpp"
@@ -281,6 +282,15 @@ MainWindow::MainWindow(Session *session, QWidget *parent) : QMainWindow(parent),
     }
 
     restoreWindowState();
+
+    // logging out of every account leaves nothing to show, so ask for a login again
+    connect(accountsModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
+        if (accountsModel->rowCount() == 0)
+            showLoginScreen();
+    });
+
+    if (accountsModel->rowCount() == 0)
+        showLoginScreen();
 }
 
 MainWindow::~MainWindow()
@@ -1159,6 +1169,7 @@ void MainWindow::setupUi()
     auto *layout = new QHBoxLayout(central);
 
     channelTree = new ChannelTreeView(this);
+    channelTree->setObjectName(QStringLiteral("ChannelTree"));
 
 #ifndef ACHERON_NO_VOICE
     voiceStatusBar = new VoiceStatusBar(this);
@@ -1201,6 +1212,7 @@ void MainWindow::setupUi()
 #endif
 
     serverRail = new ServerRailView(this);
+    serverRail->setObjectName(QStringLiteral("ServerRail"));
     serverRail->setModel(serverRailModel);
     serverRail->setItemDelegate(new ServerRailDelegate(serverRail));
     serverRail->setFixedWidth(ServerRailDelegate::RailWidth);
@@ -1222,6 +1234,7 @@ void MainWindow::setupUi()
     connect(serverRail, &ServerRailView::guildSettingsRequested, this, &MainWindow::openGuildSettings);
 
     guildHeaderLabel = new QLabel(this);
+    guildHeaderLabel->setObjectName(QStringLiteral("GuildHeader"));
     guildHeaderLabel->setContentsMargins(12, 8, 12, 8);
     {
         QFont headerFont = guildHeaderLabel->font();
@@ -1231,6 +1244,8 @@ void MainWindow::setupUi()
     guildHeaderLabel->hide();
 
     auto *rightSideWidget = new QWidget(central);
+    rightSideWidget->setObjectName(QStringLiteral("ChatPane"));
+    rightSideWidget->setAttribute(Qt::WA_StyledBackground, true);
     auto *rightLayout = new QVBoxLayout(rightSideWidget);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(0);
@@ -1258,8 +1273,6 @@ void MainWindow::setupUi()
     connect(channelTopicLine, &ChannelTopicLine::clicked, this, &MainWindow::openChannelTopicPopup);
     channelToolbarLayout->addWidget(channelTopicLine, 1);
     channelToolbarLayout->addWidget(threadBrowserButton, 0);
-    channelToolbar->setStyleSheet(
-            "#channelToolbar { border-bottom: 1px solid rgba(128, 128, 128, 0.25); }");
     channelToolbar->hide();
 
     chatView = new ChatView(rightSideWidget);
@@ -1726,12 +1739,24 @@ void MainWindow::setupUi()
 
     layout->addWidget(mainSplitter);
     layout->setContentsMargins(0, 0, 4, 0);
-    setCentralWidget(central);
+
+    auto *root = new QWidget(this);
+    shellPages = new QStackedLayout(root);
+    shellPages->setContentsMargins(0, 0, 0, 0);
+    shellPages->addWidget(central);
+
+    loginView = new LoginView(session, accountsModel, root);
+    shellPages->addWidget(loginView);
+    connect(loginView, &LoginView::loggedIn, this, &MainWindow::onAccountLoggedIn);
+
+    setCentralWidget(root);
 }
 
 QWidget *MainWindow::buildLeftSide()
 {
     auto *container = new QWidget;
+    container->setObjectName(QStringLiteral("GuildSidebar"));
+    container->setAttribute(Qt::WA_StyledBackground, true);
 
     if (channelListMode == ChannelListMode::Classic) {
         auto *h = new QHBoxLayout(container);
@@ -1768,6 +1793,25 @@ QWidget *MainWindow::buildLeftSide()
 
     container->setMinimumWidth(200);
     return container;
+}
+
+void MainWindow::showLoginScreen()
+{
+    shellPages->setCurrentWidget(loginView);
+    menuBar()->setVisible(false);
+    loginView->showQrPage();
+}
+
+void MainWindow::hideLoginScreen()
+{
+    shellPages->setCurrentIndex(0);
+    menuBar()->setVisible(true);
+}
+
+void MainWindow::onAccountLoggedIn(Snowflake accountId)
+{
+    hideLoginScreen();
+    session->connectAccount(accountId);
 }
 
 void MainWindow::applyChannelIndent()

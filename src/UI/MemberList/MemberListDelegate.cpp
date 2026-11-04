@@ -7,14 +7,17 @@
 #include "Core/Theme/Icons.hpp"
 #include "UI/StatusIndicator.hpp"
 
-constexpr static int GroupHeight = 22;
-constexpr static int MemberHeight = 28;
-constexpr static int MemberHeightWithActivity = 38;
-constexpr static int AvatarSize = 20;
-constexpr static int AvatarRadius = 4;
+constexpr static int GroupHeight = 24;
+constexpr static int MemberHeight = 40;
+constexpr static int MemberHeightWithActivity = 48;
+constexpr static int AvatarSize = 30;
+constexpr static int AvatarRadius = 15;
 constexpr static int HorizontalPadding = 8;
 constexpr static int AvatarTextSpacing = 8;
-constexpr static int StatusDotSize = 7;
+constexpr static int StatusDotSize = 10;
+constexpr static int NamePixelSize = 15;
+constexpr static int GroupPixelSize = 11;
+constexpr static int ActivityPixelSize = 11;
 constexpr static int ActivityIconSize = 12;
 constexpr static int ActivityIconSpacing = 4;
 
@@ -92,12 +95,12 @@ void MemberListDelegate::paintGroup(QPainter *painter, const QStyleOptionViewIte
     QString text = groupName.toUpper() + QString::fromUtf8(" \u2014 ") + QString::number(groupCount);
 
     QFont font = option.font;
-    font.setPixelSize(10);
+    font.setPixelSize(GroupPixelSize);
     font.setWeight(QFont::DemiBold);
     font.setLetterSpacing(QFont::AbsoluteSpacing, 0.3);
     painter->setFont(font);
 
-    painter->setPen(option.palette.color(QPalette::Disabled, QPalette::Text));
+    painter->setPen(option.palette.placeholderText().color());
 
     QRect textRect = option.rect.adjusted(HorizontalPadding, 0, -HorizontalPadding, 0);
     textRect.setTop(textRect.top() + 6);
@@ -107,10 +110,12 @@ void MemberListDelegate::paintGroup(QPainter *painter, const QStyleOptionViewIte
 void MemberListDelegate::paintMember(QPainter *painter, const QStyleOptionViewItem &option,
                                      const QModelIndex &index) const
 {
-    QColor rowColor = option.palette.color(QPalette::Window);
+    QColor rowColor = option.palette.color(QPalette::AlternateBase);
     if (option.state & QStyle::State_MouseOver) {
-        QColor hoverColor = option.palette.highlight().color();
-        hoverColor.setAlpha(30);
+        // Discord greys the row out rather than highlighting it, and the status
+        // dot has to punch through whatever the row ended up being tinted
+        QColor hoverColor = option.palette.text().color();
+        hoverColor.setAlpha(28);
         painter->fillRect(option.rect.adjusted(HorizontalPadding / 2, 1,
                                                -HorizontalPadding / 2, -1),
                           hoverColor);
@@ -153,7 +158,7 @@ void MemberListDelegate::paintMember(QPainter *painter, const QStyleOptionViewIt
     QColor roleColor = index.data(MemberListModel::RoleColorRole).value<QColor>();
 
     QFont font = option.font;
-    font.setPixelSize(12);
+    font.setPixelSize(NamePixelSize);
     font.setWeight(QFont::Medium);
     painter->setFont(font);
 
@@ -190,7 +195,7 @@ void MemberListDelegate::paintActivityLine(QPainter *painter, const QStyleOption
                                            const QRect &lineRect) const
 {
     QFont font = option.font;
-    font.setPixelSize(10);
+    font.setPixelSize(ActivityPixelSize);
     painter->setFont(font);
 
     QColor color = option.palette.color(QPalette::Text);

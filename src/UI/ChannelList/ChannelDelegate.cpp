@@ -395,7 +395,7 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
     painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter->setRenderHint(QPainter::TextAntialiasing, true);
 
-    painter->fillRect(option.rect, option.palette.base());
+    painter->fillRect(option.rect, option.palette.alternateBase());
 
     constexpr int iconSize = 24;
     constexpr int pillMargin = 6;
@@ -403,6 +403,18 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
     // content rect is shifted right to leave room for the unread pill
     QStyleOptionViewItem contentOpt = option;
     contentOpt.rect = option.rect.adjusted(pillMargin + indentWidth(node, indentScopes), 0, 0, 0);
+
+    const bool rowSelected = index.data(ChannelFilterProxyModel::SelectedRole).toBool();
+    const bool isSelected = node->opensChat() && rowSelected;
+    const bool isHovered = node->opensChat() && (option.state & QStyle::State_MouseOver);
+    if (isSelected || isHovered) {
+        // Discord keeps row tints grey and reserves the accent colour for pills
+        const QColor tint = isSelected ? option.palette.alternateBase().color().lighter(130)
+                                       : option.palette.alternateBase().color().lighter(112);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(tint);
+        painter->drawRoundedRect(option.rect.adjusted(8, 1, -8, -1), 4, 4);
+    }
 
     if (node->type == ChannelNode::Type::Account) {
         QRect textRect = contentOpt.rect.adjusted(iconSize, 0, -iconSize, 0);
@@ -444,7 +456,7 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
             StatusIndicator::paintOnAvatar(
                     *painter, avatarRect, statusDotSize,
                     index.data(ChannelTreeModel::PresenceBadgeRole).value<Core::PresenceBadge>(),
-                    option.palette.color(QPalette::Base));
+                    option.palette.color(QPalette::AlternateBase));
         }
 
         bool muted = index.data(ChannelTreeModel::IsVoiceMutedRole).toBool();
@@ -521,13 +533,12 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
             StatusIndicator::paintOnAvatar(
                     *painter, iconRect, statusDotSize,
                     index.data(ChannelTreeModel::PresenceBadgeRole).value<Core::PresenceBadge>(),
-                    option.palette.color(QPalette::Base));
+                    option.palette.color(QPalette::AlternateBase));
         }
     }
 
     // determine text color
     QColor textColor = option.palette.text().color();
-    bool isSelected = index.data(ChannelFilterProxyModel::SelectedRole).toBool();
     if (node->opensChat()) {
         if (node->isMuted)
             textColor = option.palette.text().color().darker(150);
@@ -550,17 +561,17 @@ void ChannelDelegate::paint(QPainter *painter, const QStyleOptionViewItem &optio
         else
             drawHashIcon(painter, contentOpt.rect, textColor);
         if (node->isPrivate)
-            drawPadlockOverlay(painter, contentOpt.rect, textColor, option.palette.base().color());
+            drawPadlockOverlay(painter, contentOpt.rect, textColor, option.palette.alternateBase().color());
     } else if (node->type == ChannelNode::Type::Forum) {
         drawForumIcon(painter, contentOpt.rect, textColor);
         if (node->isPrivate)
-            drawPadlockOverlay(painter, contentOpt.rect, textColor, option.palette.base().color());
+            drawPadlockOverlay(painter, contentOpt.rect, textColor, option.palette.alternateBase().color());
     } else if (node->type == ChannelNode::Type::Thread) {
         drawThreadBranchIcon(painter, contentOpt.rect, textColor, isLastThreadSibling(node));
     } else if (node->type == ChannelNode::Type::VoiceChannel) {
         drawSpeakerIcon(painter, contentOpt.rect, textColor);
         if (node->isPrivate)
-            drawPadlockOverlay(painter, contentOpt.rect, textColor, option.palette.base().color());
+            drawPadlockOverlay(painter, contentOpt.rect, textColor, option.palette.alternateBase().color());
     }
 
     const bool showForumBadge =
@@ -644,7 +655,7 @@ void ChannelDelegate::setIndentScopes(ChannelIndent::Scopes scopes)
 QSize ChannelDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     QSize sz = QStyledItemDelegate::sizeHint(option, index);
-    return QSize(sz.width(), 24);
+    return QSize(sz.width(), 28);
 }
 } // namespace UI
 } // namespace Acheron

@@ -19,6 +19,8 @@ static bool isAlwaysExpanded(ChannelNode::Type type)
 ChannelTreeView::ChannelTreeView(QWidget *parent)
     : QTreeView(parent)
 {
+    setMouseTracking(true);
+
     connect(this, &QTreeView::collapsed, this, [this](const QModelIndex &index) {
         auto nodeType = static_cast<ChannelNode::Type>(index.data(ChannelTreeModel::TypeRole).toInt());
         if (isAlwaysExpanded(nodeType))

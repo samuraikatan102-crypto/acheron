@@ -4,16 +4,26 @@
 #include <QRandomGenerator>
 
 #include "Core/Session.hpp"
+#include "Core/Theme/Manager.hpp"
 #include "Core/TokenStore.hpp"
 #include "Core/TokenUtils.hpp"
 #include "Discord/CdnUrls.hpp"
-#include "UI/Dialogs/DirectLoginDialog.hpp"
-#include "UI/Dialogs/QRLoginDialog.hpp"
+#include "UI/Login/LoginView.hpp"
 
 namespace Acheron {
 namespace UI {
 
 using namespace Acheron::Core;
+
+namespace {
+
+void setStatusColor(QLabel *label, Theme::Token token)
+{
+    const QString color = Theme::Manager::instance().color(token).name();
+    label->setStyleSheet(QStringLiteral("color: %1; font-weight: bold;").arg(color));
+}
+
+} // namespace
 
 AccountsWindow::AccountsWindow(Session *session, AccountsModel *sharedModel, QWidget *parent)
     : QWidget(parent, Qt::Window), session(session)
@@ -50,12 +60,10 @@ void AccountsWindow::setupUi()
     QHBoxLayout *btnLayout = new QHBoxLayout();
     QPushButton *addBtn = new QPushButton(tr("Add"), this);
     QPushButton *loginBtn = new QPushButton(tr("Log in"), this);
-    QPushButton *qrBtn = new QPushButton(tr("Log in with QR Code"), this);
     removeButton = new QPushButton(tr("Remove"), this);
     removeButton->setEnabled(false);
     btnLayout->addWidget(addBtn);
     btnLayout->addWidget(loginBtn);
-    btnLayout->addWidget(qrBtn);
     btnLayout->addWidget(removeButton);
     leftLayout->addLayout(btnLayout);
 
@@ -128,7 +136,6 @@ void AccountsWindow::setupUi()
 
     connect(addBtn, &QPushButton::clicked, this, &AccountsWindow::onAddClicked);
     connect(loginBtn, &QPushButton::clicked, this, &AccountsWindow::onLoginClicked);
-    connect(qrBtn, &QPushButton::clicked, this, &AccountsWindow::onQrLoginClicked);
     connect(removeButton, &QPushButton::clicked, this, &AccountsWindow::onRemoveClicked);
 
     connect(listView->selectionModel(), &QItemSelectionModel::currentChanged, this,
@@ -214,26 +221,22 @@ void AccountsWindow::onAddClicked()
 
 void AccountsWindow::onLoginClicked()
 {
-    DirectLoginDialog dlg(session, this);
-    if (dlg.exec() != QDialog::Accepted)
-        return;
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Log in"));
+    dlg.resize(560, 700);
 
-    addAccountWithToken(dlg.getToken(), {}, dlg.getProxy());
-}
+    auto *layout = new QVBoxLayout(&dlg);
+    layout->setContentsMargins(0, 0, 0, 0);
 
-void AccountsWindow::onQrLoginClicked()
-{
-    ProxyInputDialog proxyDlg(tr("QR Login"),
-                              tr("Proxy for this account (optional). Leave empty to connect directly."),
-                              this);
-    if (proxyDlg.exec() != QDialog::Accepted)
-        return;
+    auto *view = new LoginView(session, model, &dlg);
+    layout->addWidget(view);
 
-    QRLoginDialog dlg(session, proxyDlg.getProxy(), this);
-    if (dlg.exec() != QDialog::Accepted)
-        return;
+    connect(view, &LoginView::loggedIn, &dlg, &QDialog::accept);
+    connect(view, &LoginView::loggedIn, this, [this](Snowflake accountId) {
+        session->connectAccount(accountId);
+    });
 
-    addAccountWithToken(dlg.getToken(), dlg.getUsername(), proxyDlg.getProxy());
+    dlg.exec();
 }
 
 void AccountsWindow::addAccountWithToken(const QString &token, const QString &username,
@@ -408,7 +411,7 @@ void AccountsWindow::updateDetails(const AccountInfo *info)
     switch (info->state) {
     case ConnectionState::Disconnected:
         detailStatus->setText(tr("Disconnected"));
-        detailStatus->setStyleSheet("color: red; font-weight: bold;");
+        setStatusColor(detailStatus, Theme::Token::ChatError);
 #ifdef ACHERON_MULTI_ACCOUNT
         connectButton->setEnabled(true);
 #else
@@ -418,19 +421,19 @@ void AccountsWindow::updateDetails(const AccountInfo *info)
         break;
     case ConnectionState::Connecting:
         detailStatus->setText(tr("Connecting..."));
-        detailStatus->setStyleSheet("color: orange; font-weight: bold;");
+        setStatusColor(detailStatus, Theme::Token::StatusIdle);
         connectButton->setEnabled(false);
         disconnectButton->setEnabled(true);
         break;
     case ConnectionState::Connected:
         detailStatus->setText(tr("Connected"));
-        detailStatus->setStyleSheet("color: green; font-weight: bold;");
+        setStatusColor(detailStatus, Theme::Token::StatusOnline);
         connectButton->setEnabled(false);
         disconnectButton->setEnabled(true);
         break;
     case ConnectionState::Disconnecting:
         detailStatus->setText(tr("Disconnecting..."));
-        detailStatus->setStyleSheet("color: orange; font-weight: bold;");
+        setStatusColor(detailStatus, Theme::Token::StatusIdle);
         connectButton->setEnabled(false);
         disconnectButton->setEnabled(false);
         break;

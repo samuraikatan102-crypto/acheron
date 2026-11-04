@@ -134,7 +134,7 @@ void ChatTextEdit::insertFromMimeData(const QMimeData *source)
 MessageInput::MessageInput(QWidget *parent) : QWidget(parent)
 {
     auto *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(4, 0, 4, 0);
+    outerLayout->setContentsMargins(16, 0, 16, 8);
     outerLayout->setSpacing(0);
 
     // Reply bar
@@ -145,7 +145,7 @@ MessageInput::MessageInput(QWidget *parent) : QWidget(parent)
     replyLayout->setSpacing(4);
 
     replyLabel = new QLabel(replyBar);
-    replyLabel->setStyleSheet("color: #b5bac1; font-size: 12px;");
+    replyLabel->setStyleSheet(QStringLiteral("color: palette(placeholder-text); font-size: 14px;"));
     replyLayout->addWidget(replyLabel, 1);
 
     replyCancelButton = new QToolButton(replyBar);

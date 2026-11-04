@@ -612,7 +612,7 @@ void ChatDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
             if (showBlurred)
                 paintSpoilerOverlay(painter, imgLayout.rect, option.font);
         } else {
-            painter->fillRect(imgLayout.rect, QColor(60, 60, 60));
+            painter->fillRect(imgLayout.rect, option.palette.color(QPalette::Button));
             painter->setPen(option.palette.text().color());
             painter->drawText(imgLayout.rect, Qt::AlignCenter, tr("Loading..."));
         }
@@ -919,7 +919,7 @@ void ChatDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
                     }
                     drawGifAccessories(painter, imgLayout.rect, gif.badge, gif.star, option.font);
                 } else {
-                    painter->fillRect(imgLayout.rect, QColor(60, 60, 60));
+                    painter->fillRect(imgLayout.rect, option.palette.color(QPalette::Button));
                     painter->setPen(option.palette.text().color());
                     painter->drawText(imgLayout.rect, Qt::AlignCenter, "Loading...");
                 }

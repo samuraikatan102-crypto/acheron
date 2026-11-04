@@ -10,45 +10,45 @@ const std::vector<TokenDescriptor> &registry()
 {
     static const std::vector<TokenDescriptor> reg = {
         // backgrounds
-        { Token::WindowBg, "window.bg", "Window background", "Backgrounds", QColor(24, 22, 34),
+        { Token::WindowBg, "window.bg", "Window background", "Backgrounds", QColor(30, 31, 34),
           QPalette::Window, false },
-        { Token::BaseBg, "base.bg", "Base", "Backgrounds", QColor(30, 28, 44),
+        { Token::BaseBg, "base.bg", "Base", "Backgrounds", QColor(49, 51, 56),
           QPalette::Base, false },
-        { Token::AlternateBaseBg, "base.alt", "Alternate base", "Backgrounds", QColor(36, 34, 54),
+        { Token::AlternateBaseBg, "base.alt", "Alternate base", "Backgrounds", QColor(43, 45, 49),
           QPalette::AlternateBase, false },
-        { Token::ButtonBg, "button.bg", "Button", "Backgrounds", QColor(40, 38, 60),
+        { Token::ButtonBg, "button.bg", "Button", "Backgrounds", QColor(56, 58, 64),
           QPalette::Button, false },
-        { Token::TooltipBg, "tooltip.bg", "Tooltip background", "Backgrounds", QColor(40, 38, 60),
+        { Token::TooltipBg, "tooltip.bg", "Tooltip background", "Backgrounds", QColor(24, 25, 28),
           QPalette::ToolTipBase, false },
 
         // text
-        { Token::WindowText, "text.window", "Window text", "Text", QColor(210, 208, 225),
+        { Token::WindowText, "text.window", "Window text", "Text", QColor(219, 222, 225),
           QPalette::WindowText, false },
-        { Token::PrimaryText, "text.primary", "Primary text", "Text", QColor(200, 198, 220),
+        { Token::PrimaryText, "text.primary", "Primary text", "Text", QColor(219, 222, 225),
           QPalette::Text, false },
-        { Token::ButtonText, "text.button", "Button text", "Text", QColor(210, 208, 225),
+        { Token::ButtonText, "text.button", "Button text", "Text", QColor(219, 222, 225),
           QPalette::ButtonText, false },
-        { Token::TooltipText, "text.tooltip", "Tooltip text", "Text", QColor(220, 218, 240),
+        { Token::TooltipText, "text.tooltip", "Tooltip text", "Text", QColor(242, 243, 245),
           QPalette::ToolTipText, false },
         { Token::PlaceholderText, "text.placeholder", "Placeholder text", "Text",
-          QColor(126, 124, 153), QPalette::PlaceholderText, false },
-        { Token::DisabledText, "text.disabled", "Disabled text", "Text", QColor(126, 124, 153),
+          QColor(148, 155, 164), QPalette::PlaceholderText, false },
+        { Token::DisabledText, "text.disabled", "Disabled text", "Text", QColor(110, 113, 119),
           std::nullopt, false },
-        { Token::BrightText, "text.bright", "Bright text", "Text", QColor(189, 146, 236),
+        { Token::BrightText, "text.bright", "Bright text", "Text", QColor(242, 243, 245),
           QPalette::BrightText, false },
 
         // accents
         { Token::Highlight, "accent.highlight", "Highlight", "Accents",
-          QColor(124, 92, 192), QPalette::Highlight, false },
+          QColor(88, 101, 242), QPalette::Highlight, false },
         { Token::HighlightedText, "accent.highlightText", "Highlighted text", "Accents",
-          QColor(245, 244, 255), QPalette::HighlightedText, false },
-        { Token::LinkText, "accent.link", "Links", "Accents", QColor(157, 180, 255), QPalette::Link,
+          QColor(255, 255, 255), QPalette::HighlightedText, false },
+        { Token::LinkText, "accent.link", "Links", "Accents", QColor(0, 176, 247), QPalette::Link,
           false },
-        { Token::Divider, "accent.divider", "Dividers", "Accents", QColor(58, 55, 88),
+        { Token::Divider, "accent.divider", "Dividers", "Accents", QColor(38, 40, 44),
           QPalette::Mid, false },
 
         // extended chat elements
-        { Token::ChatError, "chat.error", "Failed message", "Chat", QColor(220, 50, 50),
+        { Token::ChatError, "chat.error", "Failed message", "Chat", QColor(242, 63, 67),
           std::nullopt, false },
         { Token::EmbedDefault, "chat.embedDefault", "Default embed color", "Chat",
           QColor(88, 101, 242), std::nullopt, true },
@@ -66,7 +66,7 @@ const std::vector<TokenDescriptor> &registry()
           std::nullopt, false },
         { Token::StatusOffline, "status.offline", "Offline", "Presence", QColor(128, 132, 142),
           std::nullopt, false },
-        { Token::StatusStreaming, "status.streaming", "Streaming", "Presence", QColor(89, 54, 149),
+        { Token::StatusStreaming, "status.streaming", "Streaming", "Presence", QColor(88, 101, 242),
           std::nullopt, false },
     };
     return reg;
@@ -122,7 +122,7 @@ qreal densityScale()
 
 int cornerRadius()
 {
-    return qBound(0, QSettings().value(RadiusKey, 6).toInt(), 16);
+    return qBound(0, QSettings().value(RadiusKey, 4).toInt(), 16);
 }
 
 void setCornerRadius(int pixels)

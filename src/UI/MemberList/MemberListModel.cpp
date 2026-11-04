@@ -6,7 +6,7 @@
 namespace Acheron {
 namespace UI {
 
-constexpr static QSize AvatarRequestSize = QSize(32, 32);
+constexpr static QSize AvatarRequestSize = QSize(48, 48);
 constexpr static QSize EmojiRequestSize = QSize(16, 16);
 
 MemberListModel::MemberListModel(Core::ImageManager *imageManager, QObject *parent)
