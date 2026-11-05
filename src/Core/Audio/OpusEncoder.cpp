@@ -7,8 +7,6 @@ namespace Acheron {
 namespace Core {
 namespace Audio {
 
-static constexpr int OPUS_MAX_PACKET_SIZE = 4000;
-
 OpusEncoder::OpusEncoder() = default;
 
 OpusEncoder::~OpusEncoder()
@@ -50,13 +48,13 @@ QByteArray OpusEncoder::encode(const QByteArray &pcmFrame)
         return {};
     }
 
-    QByteArray encoded(OPUS_MAX_PACKET_SIZE, '\0');
+    QByteArray encoded(MaxPacketBytes, '\0');
 
     int bytes = opus_encode(encoder,
                             reinterpret_cast<const opus_int16 *>(pcmFrame.constData()),
                             frameSamples,
                             reinterpret_cast<unsigned char *>(encoded.data()),
-                            OPUS_MAX_PACKET_SIZE);
+                            packetBudget);
 
     if (bytes < 0) {
         qCWarning(LogVoice) << "Opus encode failed:" << opus_strerror(bytes);
@@ -69,8 +67,21 @@ QByteArray OpusEncoder::encode(const QByteArray &pcmFrame)
 
 void OpusEncoder::setBitrate(int bitrate)
 {
-    if (encoder)
+    if (!encoder)
+        return;
+
+    if (bitrate <= CodecBitratePerChannel * qMax(1, frameChannels)) {
         opus_encoder_ctl(encoder, OPUS_SET_BITRATE(bitrate));
+        packetBudget = MaxPacketBytes;
+        return;
+    }
+
+    // Past the codec's own ceiling the only way to spend more bits per second is to
+    // let every frame fill a bigger packet: OPUS_BITRATE_MAX means "use whatever the
+    // buffer allows", so the buffer becomes the bitrate.
+    opus_encoder_ctl(encoder, OPUS_SET_BITRATE(OPUS_BITRATE_MAX));
+    const int bytes = bitrate * AUDIO_FRAME_DURATION_MS / 8000; // bps × seconds, rounded down to whole bytes
+    packetBudget = qBound(1, bytes, MaxPacketBytes);
 }
 
 void OpusEncoder::setComplexity(int complexity)

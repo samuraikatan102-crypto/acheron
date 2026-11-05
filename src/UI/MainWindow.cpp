@@ -2418,7 +2418,9 @@ void MainWindow::openBitrateConsole()
 
                          QString message = tr("bitrate  %1 bps").arg(bitrate);
                          if (capped != value)
-                             message += tr("   (Opus tops out at 1000000)");
+                             message += tr("   (8000 – 1000000 bps)");
+                         else if (bitrate > 512000)
+                             message += tr("   (one packet is now bigger than one MTU)");
                          return CommandBar::Outcome { true, message };
                      });
 }
