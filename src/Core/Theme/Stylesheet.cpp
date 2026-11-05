@@ -361,6 +361,20 @@ QString buildStyleSheet()
                    .arg(hex(panelBg), hex(divider), hex(placeholderText), hex(brightText),
                         rgba(primaryText, 14), rgba(primaryText, 24));
 
+    // The F2/F3 strip is a console, so it looks like one: a dark plate, a prompt
+    // caret and monospace text.
+    qss += QStringLiteral("QWidget#CommandBar { background-color: %1; border: 1px solid %2;"
+                          "  border-radius: %3; }"
+                          "QLabel#CommandBarTitle, QLineEdit#CommandBarInput { color: %4; }"
+                          "QLabel#CommandBarTitle { font-weight: 600; }"
+                          "QLabel#CommandBarHint { color: %5; font-size: 11px; }"
+                          "QLabel#CommandBarPrompt { color: %6; font-weight: 700; }"
+                          "QLineEdit#CommandBarInput { background-color: transparent; border: none;"
+                          "  font-size: 14px; }"
+                          "QLabel#CommandBarResult { font-size: 12px; }")
+                   .arg(hex(baseBg), hex(divider), radiusPx, hex(brightText),
+                        hex(placeholderText), hex(linkText));
+
     // User Settings opens over the app like Discord's: a darker navigation rail
     // on the left, the page on the right, and an X in the corner.
     const QColor danger = m.color(Token::StatusDnd);

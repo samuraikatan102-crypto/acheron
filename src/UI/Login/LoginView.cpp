@@ -343,6 +343,15 @@ void LoginView::showTokenPage()
     tokenEdit->setFocus();
 }
 
+void LoginView::showExpiredSession(const QString &reason)
+{
+    stopQrPolling();
+
+    stack->setCurrentWidget(tokenPage);
+    setStatus(tokenStatus, reason);
+    tokenEdit->setFocus();
+}
+
 // Discord spends a code as soon as it is answered or left, so the next visit to
 // the QR page gets a fresh client instead of a restarted one
 void LoginView::stopQrPolling()
@@ -697,6 +706,8 @@ void LoginView::storeToken(const QString &token)
     Core::AccountInfo acc;
     acc.id = userId;
     acc.token = token;
+    // without this the stored token is never picked up again after a restart
+    acc.autoConnect = true;
     acc.username = pendingUsername.isEmpty() ? QStringLiteral("unknown") : pendingUsername;
     acc.displayName = acc.username;
     if (stack->currentWidget() == qrPage)

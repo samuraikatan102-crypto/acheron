@@ -45,6 +45,9 @@ public:
     void showPasswordPage();
     void showTokenPage();
 
+    // a saved account that lost its token: ask for it again on the token page
+    void showExpiredSession(const QString &reason);
+
 signals:
     void loggedIn(Core::Snowflake accountId);
 

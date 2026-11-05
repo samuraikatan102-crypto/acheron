@@ -163,6 +163,11 @@ private:
     bool cachedOpusFec = true;
     int cachedOpusPacketLossPercent = 0;
     bool cachedNoiseSuppression = true;
+
+    // the pipeline only exists while a call is up, so levels live here too
+    float cachedInputGain = 1.0f;
+    float cachedOutputVolume = 1.0f;
+    float cachedVadThreshold = 100.0f;
 #ifdef ACHERON_HAVE_RNNOISE
     bool cachedUseRnnoiseVad = true;
 #else

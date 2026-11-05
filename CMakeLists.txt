@@ -184,6 +184,7 @@ set(PROJECT_SOURCES
     src/Core/Presence/PresenceManager.cpp
     src/Core/Presence/ActivityFormat.cpp
     src/Core/MurmurHash3.cpp
+    src/Core/Audio/AudioSettings.cpp
     src/Core/EmojiSegmenter.cpp
     src/Core/Emoji/EmojiManager.cpp
     src/Core/Gifs/FavoriteGifRules.cpp
@@ -206,6 +207,7 @@ set(PROJECT_SOURCES
     src/Core/Media/CurlAvio.cpp
     src/UI/MainWindow.cpp
     src/UI/UserPanel.cpp
+    src/UI/CommandBar.cpp
     src/UI/BrowserCaptchaResolver.cpp
     src/UI/TypingIndicator.cpp
     src/UI/SlowModeIndicator.cpp

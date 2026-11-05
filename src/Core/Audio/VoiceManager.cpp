@@ -244,12 +244,16 @@ Discord::Voice::VoiceClient::State VoiceManager::clientState() const
 
 void VoiceManager::setInputGain(float gain)
 {
+    cachedInputGain = gain;
+
     if (audioPipeline)
         QMetaObject::invokeMethod(audioPipeline, [p = audioPipeline, gain]() { p->setInputGain(gain); });
 }
 
 void VoiceManager::setOutputVolume(float volume)
 {
+    cachedOutputVolume = volume;
+
     if (audioPipeline)
         QMetaObject::invokeMethod(audioPipeline, [p = audioPipeline, volume]() { p->setOutputVolume(volume); });
 }
@@ -262,6 +266,8 @@ void VoiceManager::setUserVolume(Snowflake userId, float volume)
 
 void VoiceManager::setVadThreshold(float threshold)
 {
+    cachedVadThreshold = threshold;
+
     if (audioPipeline)
         QMetaObject::invokeMethod(audioPipeline, [p = audioPipeline, threshold]() { p->setVadThreshold(threshold); });
 }
@@ -681,8 +687,12 @@ void VoiceManager::onVoiceClientConnected()
     int plp = cachedOpusPacketLossPercent;
     bool ns = cachedNoiseSuppression;
     bool nsVad = cachedUseRnnoiseVad;
+    float gain = cachedInputGain;
+    float volume = cachedOutputVolume;
+    float vad = cachedVadThreshold;
     QMetaObject::invokeMethod(audioPipeline, [p = audioPipeline, audio, capturing, inputId, outputId,
-                                              application, bitrate, complexity, signalType, fec, plp, ns, nsVad]() {
+                                              application, bitrate, complexity, signalType, fec, plp, ns, nsVad,
+                                              gain, volume, vad]() {
         p->setOpusApplication(application);
         p->setOpusBitrate(bitrate);
         p->setOpusComplexity(complexity);
@@ -696,6 +706,9 @@ void VoiceManager::onVoiceClientConnected()
             p->setInputDevice(inputId);
         if (!outputId.isEmpty())
             p->setOutputDevice(outputId);
+        p->setInputGain(gain);
+        p->setOutputVolume(volume);
+        p->setVadThreshold(vad);
     });
 
     populateParticipantsFromCache();

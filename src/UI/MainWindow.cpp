@@ -66,6 +66,8 @@
 #include "Core/Presence/PresenceManager.hpp"
 #include "Core/Session.hpp"
 #include "Core/Theme/Manager.hpp"
+#include "Core/Audio/AudioSettings.hpp"
+#include "CommandBar.hpp"
 #include "UserPanel.hpp"
 #ifndef ACHERON_NO_VOICE
 #include "Core/Audio/VoiceManager.hpp"
@@ -239,6 +241,17 @@ MainWindow::MainWindow(Session *session, QWidget *parent) : QMainWindow(parent),
         if (channelListMode == ChannelListMode::Classic)
             applyPendingRailSelection(ready.user->id);
     });
+
+    // a stored account whose token the keychain no longer has would otherwise
+    // leave the window connected to nothing at all
+    connect(session, &Session::connectFailed, this,
+            [this](Core::Snowflake accountId, const QString &reason) {
+                if (currentInstance || session->client(accountId))
+                    return;
+
+                shellPages->setCurrentWidget(loginView);
+                loginView->showExpiredSession(reason);
+            });
 
     connect(accountsModel, &AccountsModel::dataChanged, this,
             [this, session](const QModelIndex &topLeft, const QModelIndex &bottomRight,
@@ -2289,6 +2302,137 @@ void MainWindow::refreshUserPanelIdentity()
     userPanel->setSelf(name, status, avatar, selfId, badge);
 }
 
+namespace {
+
+// "12", "2,5", "45x", "100%" all mean the same thing to a person typing fast.
+double parseGainArgument(const QString &input, bool *ok)
+{
+    *ok = false;
+
+    QString text = input.trimmed().toLower();
+    text.remove(QLatin1Char(' '));
+    if (text.isEmpty())
+        return 0.0;
+
+    const bool percent = text.endsWith(QLatin1Char('%'));
+    if (percent || text.endsWith(QLatin1Char('x')) || text.endsWith(QChar(0x00D7)))
+        text.chop(1);
+
+    text.replace(QLatin1Char(','), QLatin1Char('.'));
+
+    bool numeric = false;
+    const double value = text.toDouble(&numeric);
+    if (!numeric)
+        return 0.0;
+
+    *ok = true;
+    return percent ? value / 100.0 : value;
+}
+
+// A bare number up to 2000 is how people quote kilobits; anything above is bits.
+double parseBitrateArgument(const QString &input, bool *ok)
+{
+    *ok = false;
+
+    QString text = input.trimmed().toLower();
+    text.remove(QLatin1Char(' '));
+    if (text.endsWith(QStringLiteral("bps")))
+        text.chop(3);
+    else if (text.endsWith(QLatin1Char('b')))
+        text.chop(1);
+    if (text.isEmpty())
+        return 0.0;
+
+    double scale = 1.0;
+    if (text.endsWith(QLatin1Char('k'))) {
+        scale = 1000.0;
+        text.chop(1);
+    } else if (text.endsWith(QLatin1Char('m'))) {
+        scale = 1000000.0;
+        text.chop(1);
+    }
+
+    text.replace(QLatin1Char(','), QLatin1Char('.'));
+
+    bool numeric = false;
+    const double value = text.toDouble(&numeric);
+    if (!numeric || value <= 0.0)
+        return 0.0;
+
+    *ok = true;
+    if (scale == 1.0 && value <= 2000.0)
+        return value * 1000.0;
+    return value * scale;
+}
+
+} // namespace
+
+void MainWindow::openGainConsole()
+{
+    const double current = Core::Audio::AudioSettings::inputGain();
+
+    commandBar->open(tr("INPUT GAIN"),
+                     tr("0 – 100 ×  ·  F3 sets the bitrate"),
+                     QStringLiteral("100"),
+                     QString::number(current, 'f', 2),
+                     [this](const QString &argument) {
+                         bool ok = false;
+                         const double value = parseGainArgument(argument, &ok);
+                         if (!ok || value < 0.0)
+                             return CommandBar::Outcome { false, tr("Type a number from 0 to 100.") };
+
+                         const double gain = Core::Audio::AudioSettings::clampGain(value);
+                         Core::Audio::AudioSettings::setInputGain(gain);
+                         applyAudioSettingsLive();
+
+                         QString message = tr("input gain  %1 ×").arg(gain, 0, 'f', 2);
+                         if (gain != value)
+                             message += tr("   (100 is the ceiling)");
+                         return CommandBar::Outcome { true, message };
+                     });
+}
+
+void MainWindow::openBitrateConsole()
+{
+    const int current = Core::Audio::AudioSettings::bitrate();
+
+    commandBar->open(tr("BITRATE"),
+                     tr("8000 – 1000000 bps  ·  96k and 1m work too"),
+                     QStringLiteral("1000000"),
+                     QString::number(current),
+                     [this](const QString &argument) {
+                         bool ok = false;
+                         const double value = parseBitrateArgument(argument, &ok);
+                         if (!ok)
+                             return CommandBar::Outcome {
+                                 false, tr("Try 96k, 256000 or 1m.")
+                             };
+
+                         const double capped =
+                                 qBound(static_cast<double>(Core::Audio::AudioSettings::MinBitrate),
+                                        value,
+                                        static_cast<double>(Core::Audio::AudioSettings::MaxBitrate));
+                         const int bitrate = static_cast<int>(capped);
+                         Core::Audio::AudioSettings::setBitrate(bitrate);
+                         applyAudioSettingsLive();
+
+                         QString message = tr("bitrate  %1 bps").arg(bitrate);
+                         if (capped != value)
+                             message += tr("   (Opus tops out at 1000000)");
+                         return CommandBar::Outcome { true, message };
+                     });
+}
+
+void MainWindow::applyAudioSettingsLive()
+{
+#ifndef ACHERON_NO_VOICE
+    for (const auto &instance : session->getClients()) {
+        if (instance)
+            Core::Audio::AudioSettings::applyTo(instance->voice());
+    }
+#endif
+}
+
 #ifndef ACHERON_NO_VOICE
 void MainWindow::updateVoicePanel()
 {
@@ -2731,6 +2875,22 @@ void MainWindow::setupMenu()
     settingsShortcut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
     connect(settingsShortcut, &QAction::triggered, this, &MainWindow::openSettingsWindow);
     addAction(settingsShortcut);
+
+    commandBar = new CommandBar(this);
+
+    // F2 and F3 are grabbed application-wide: the typed value has to land even
+    // while the caret sits in the message box.
+    auto *gainConsole = new QAction(tr("Set Input Gain"), this);
+    gainConsole->setShortcut(QKeySequence(Qt::Key_F2));
+    gainConsole->setShortcutContext(Qt::ApplicationShortcut);
+    connect(gainConsole, &QAction::triggered, this, &MainWindow::openGainConsole);
+    addAction(gainConsole);
+
+    auto *bitrateConsole = new QAction(tr("Set Bitrate"), this);
+    bitrateConsole->setShortcut(QKeySequence(Qt::Key_F3));
+    bitrateConsole->setShortcutContext(Qt::ApplicationShortcut);
+    connect(bitrateConsole, &QAction::triggered, this, &MainWindow::openBitrateConsole);
+    addAction(bitrateConsole);
 
     auto *emojiPickerShortcut = new QAction(this);
     emojiPickerShortcut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));

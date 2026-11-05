@@ -50,9 +50,8 @@ class ChannelTopicLine;
 class FriendsView;
 class GuildSettingsWindow;
 class TrayIcon;
-#ifndef ACHERON_NO_VOICE
 class UserPanel;
-#endif
+class CommandBar;
 } // namespace UI
 } // namespace Acheron
 
@@ -149,6 +148,10 @@ private:
     void setupUi();
     void setupMenu();
 
+    void openGainConsole();
+    void openBitrateConsole();
+    void applyAudioSettingsLive();
+
     [[nodiscard]] TabEntry makeTabEntry(ChannelNode *node, ChannelNode *accountNode) const;
 
     enum class ViewMode { TextChannel,
@@ -244,6 +247,7 @@ private:
     Core::TypingTracker *typingTracker;
 
     UserPanel *userPanel = nullptr;
+    CommandBar *commandBar = nullptr;
     LoginView *loginView = nullptr;
     QStackedLayout *shellPages = nullptr;
     SettingsWindow *settingsWindow = nullptr;

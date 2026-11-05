@@ -1,6 +1,7 @@
 #include "ClientInstance.hpp"
 #include "ReadStateManager.hpp"
 #ifndef ACHERON_NO_VOICE
+#include "Core/Audio/AudioSettings.hpp"
 #include "Core/Audio/VoiceManager.hpp"
 #endif
 
@@ -76,6 +77,7 @@ ClientInstance::ClientInstance(const AccountInfo &info,
     messageManager->setEmojiManager(emojiManager);
 #ifndef ACHERON_NO_VOICE
     voiceManager = new Audio::VoiceManager(info.id, info.proxy, this);
+    Audio::AudioSettings::applyTo(voiceManager);
     connect(voiceManager, &Audio::VoiceManager::voiceConnected, this, &ClientInstance::onVoiceConnected);
     connect(voiceManager, &Audio::VoiceManager::voiceDisconnected, this, &ClientInstance::onVoiceDisconnected);
 #endif

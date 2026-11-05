@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <QPointer>
+#include <QSettings>
 
 #include "Discord/CurlUtils.hpp"
 #include "ImageManager.hpp"
@@ -114,6 +115,15 @@ void Session::startInstance(const AccountInfo &acc)
 
 void Session::autoConnectAccounts()
 {
+    QSettings settings;
+    if (!settings.contains(QStringLiteral("general/auto_connect_migrated"))) {
+        // accounts saved before this build were logged in once and never came
+        // back, because nothing marked them as auto-connect
+        for (const auto &acc : repo.getAllAccounts())
+            repo.updateAutoConnect(acc.id, true);
+        settings.setValue(QStringLiteral("general/auto_connect_migrated"), 1);
+    }
+
     for (const auto &acc : repo.getAllAccounts()) {
         if (acc.autoConnect)
             connectAccount(acc.id);

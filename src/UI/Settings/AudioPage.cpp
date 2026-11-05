@@ -1,6 +1,7 @@
 #include "AudioPage.hpp"
 
 #include "Core/Audio/AudioBackends.hpp"
+#include "Core/Audio/AudioSettings.hpp"
 
 #ifndef ACHERON_NO_VOICE
 #include "Core/Audio/VoiceManager.hpp"
@@ -16,7 +17,6 @@
 #include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QSettings>
 #include <QSlider>
 #include <QVBoxLayout>
 
@@ -33,6 +33,23 @@ struct Option
 };
 #endif
 
+// Each knob reaches the settings service and the live manager through one id,
+// so the sliders, the F2/F3 console and a new connection cannot drift apart.
+enum class Control
+{
+    InputGain,
+    OutputVolume,
+    VadThreshold,
+    Bitrate,
+    Complexity,
+    PacketLoss,
+    Fec,
+    Application,
+    SignalType,
+    NoiseSuppression,
+    RnnoiseVad
+};
+
 QLabel *sectionTitle(const QString &text, QWidget *parent)
 {
     auto *label = new QLabel(text, parent);
@@ -46,6 +63,161 @@ QLabel *fieldLabel(const QString &text, QWidget *parent)
     label->setObjectName(QStringLiteral("SettingsFieldLabel"));
     return label;
 }
+
+// the value as the slider wants to see it
+int sliderValue(Control control)
+{
+    using Core::Audio::AudioSettings;
+
+    switch (control) {
+    case Control::InputGain:
+        return qMax(0, qRound(AudioSettings::inputGain()));
+    case Control::OutputVolume:
+        return qMax(0, qRound(AudioSettings::outputVolume()));
+    case Control::VadThreshold:
+        return qRound(AudioSettings::vadThreshold());
+    case Control::Bitrate:
+        return AudioSettings::bitrate() / 1000;
+    case Control::Complexity:
+        return AudioSettings::complexity();
+    case Control::PacketLoss:
+        return AudioSettings::packetLossPercent();
+    default:
+        return 0;
+    }
+}
+
+void storeSlider(Control control, int value)
+{
+    using Core::Audio::AudioSettings;
+
+    switch (control) {
+    case Control::InputGain:
+        AudioSettings::setInputGain(value);
+        break;
+    case Control::OutputVolume:
+        AudioSettings::setOutputVolume(value);
+        break;
+    case Control::VadThreshold:
+        AudioSettings::setVadThreshold(value);
+        break;
+    case Control::Bitrate:
+        AudioSettings::setBitrate(value * 1000);
+        break;
+    case Control::Complexity:
+        AudioSettings::setComplexity(value);
+        break;
+    case Control::PacketLoss:
+        AudioSettings::setPacketLossPercent(value);
+        break;
+    default:
+        break;
+    }
+}
+
+[[maybe_unused]] void storeCheck(Control control, bool checked)
+{
+    using Core::Audio::AudioSettings;
+
+    switch (control) {
+    case Control::Fec:
+        AudioSettings::setFec(checked);
+        break;
+    case Control::NoiseSuppression:
+        AudioSettings::setNoiseSuppression(checked);
+        break;
+    case Control::RnnoiseVad:
+        AudioSettings::setRnnoiseVad(checked);
+        break;
+    default:
+        break;
+    }
+}
+
+[[maybe_unused]] void storeCombo(Control control, int value)
+{
+    switch (control) {
+    case Control::Application:
+        Core::Audio::AudioSettings::setApplication(value);
+        break;
+    case Control::SignalType:
+        Core::Audio::AudioSettings::setSignalType(value);
+        break;
+    default:
+        break;
+    }
+}
+
+bool checkValue(Control control)
+{
+    using Core::Audio::AudioSettings;
+
+    switch (control) {
+    case Control::Fec:
+        return AudioSettings::fec();
+    case Control::NoiseSuppression:
+        return AudioSettings::noiseSuppression();
+    case Control::RnnoiseVad:
+        return AudioSettings::rnnoiseVad();
+    default:
+        return false;
+    }
+}
+
+[[maybe_unused]] int comboValue(Control control, int fallback)
+{
+    using Core::Audio::AudioSettings;
+
+    const int stored = control == Control::Application ? AudioSettings::application()
+                                                     : AudioSettings::signalType();
+    return stored == 0 ? fallback : stored;
+}
+
+#ifndef ACHERON_NO_VOICE
+void pushToVoiceManager(Core::Audio::VoiceManager *manager, Control control)
+{
+    if (!manager)
+        return;
+
+    using Core::Audio::AudioSettings;
+
+    switch (control) {
+    case Control::InputGain:
+        manager->setInputGain(static_cast<float>(AudioSettings::inputGain()));
+        break;
+    case Control::OutputVolume:
+        manager->setOutputVolume(static_cast<float>(AudioSettings::outputVolume()));
+        break;
+    case Control::VadThreshold:
+        manager->setVadThreshold(static_cast<float>(AudioSettings::vadThreshold()));
+        break;
+    case Control::Bitrate:
+        manager->setOpusBitrate(AudioSettings::bitrate());
+        break;
+    case Control::Complexity:
+        manager->setOpusComplexity(AudioSettings::complexity());
+        break;
+    case Control::PacketLoss:
+        manager->setOpusPacketLossPercent(AudioSettings::packetLossPercent());
+        break;
+    case Control::Fec:
+        manager->setOpusFec(AudioSettings::fec());
+        break;
+    case Control::Application:
+        manager->setOpusApplication(AudioSettings::application());
+        break;
+    case Control::SignalType:
+        manager->setOpusSignalType(AudioSettings::signalType());
+        break;
+    case Control::NoiseSuppression:
+        manager->setNoiseSuppressionEnabled(AudioSettings::noiseSuppression());
+        break;
+    case Control::RnnoiseVad:
+        manager->setUseRnnoiseVad(AudioSettings::rnnoiseVad());
+        break;
+    }
+}
+#endif
 
 } // namespace
 
@@ -69,10 +241,11 @@ AudioPage::AudioPage(QWidget *parent)
 
     layout->addWidget(fieldLabel(tr("Microphone Test"), this), 0);
     volumeMeter = new VolumeMeter(this);
-    volumeMeter->setThreshold(100.0f);
+    volumeMeter->setThreshold(static_cast<float>(Core::Audio::AudioSettings::vadThreshold()));
     layout->addWidget(volumeMeter, 0);
 
-    deviceHint = new QLabel(tr("Speak to make the bar move. Device changes apply right away."),
+    deviceHint = new QLabel(tr("Speak to make the bar move. Device changes apply right away and are "
+                              "remembered. F2 sets the gain, F3 the bitrate."),
                             this);
     deviceHint->setObjectName(QStringLiteral("SettingsPageHint"));
     deviceHint->setWordWrap(true);
@@ -81,13 +254,17 @@ AudioPage::AudioPage(QWidget *parent)
     layout->addSpacing(12);
 
     connect(inputDeviceCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        const QByteArray id = inputDeviceCombo->itemData(index).toByteArray();
+        Core::Audio::AudioSettings::setInputDevice(id);
         if (voiceManager)
-            voiceManager->setInputDevice(inputDeviceCombo->itemData(index).toByteArray());
+            voiceManager->setInputDevice(id);
     });
 
     connect(outputDeviceCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        const QByteArray id = outputDeviceCombo->itemData(index).toByteArray();
+        Core::Audio::AudioSettings::setOutputDevice(id);
         if (voiceManager)
-            voiceManager->setOutputDevice(outputDeviceCombo->itemData(index).toByteArray());
+            voiceManager->setOutputDevice(id);
     });
 #endif
 
@@ -113,8 +290,8 @@ AudioPage::AudioPage(QWidget *parent)
     layout->addSpacing(12);
     layout->addWidget(sectionTitle(tr("Levels"), this), 0);
 
-    auto addSlider = [this, layout](const QString &title, const QString &key, int fallback, int min,
-                                   int max, const QString &suffix) {
+    auto addSlider = [this, layout](const QString &title, Control control, int min, int max,
+                                   const QString &suffix) {
         layout->addWidget(fieldLabel(title, this), 0);
 
         auto *row = new QHBoxLayout();
@@ -123,7 +300,7 @@ AudioPage::AudioPage(QWidget *parent)
 
         auto *slider = new QSlider(Qt::Horizontal, this);
         slider->setRange(min, max);
-        slider->setValue(QSettings().value(key, fallback).toInt());
+        slider->setValue(qBound(min, sliderValue(control), max));
 
         auto *valueLabel = new QLabel(this);
         valueLabel->setFixedWidth(64);
@@ -134,49 +311,29 @@ AudioPage::AudioPage(QWidget *parent)
         row->addWidget(valueLabel, 0);
         layout->addLayout(row, 0);
 
-        connect(slider, &QSlider::valueChanged, this, [this, slider, valueLabel, key, suffix]() {
+        connect(slider, &QSlider::valueChanged, this, [this, slider, valueLabel, control, suffix]() {
             const int value = slider->value();
             valueLabel->setText(QString::number(value) + suffix);
-            QSettings().setValue(key, value);
+            storeSlider(control, value);
 
 #ifndef ACHERON_NO_VOICE
-            if (voiceManager) {
-                if (key == QLatin1String("voice/input_gain"))
-                    voiceManager->setInputGain(static_cast<float>(value) / 100.0f);
-                else if (key == QLatin1String("voice/output_volume"))
-                    voiceManager->setOutputVolume(static_cast<float>(value) / 100.0f);
-                else if (key == QLatin1String("voice/vad_threshold")) {
-                    voiceManager->setVadThreshold(static_cast<float>(value));
-                    if (volumeMeter)
-                        volumeMeter->setThreshold(static_cast<float>(value));
-                } else if (key == QLatin1String("voice/codec/bitrate"))
-                    voiceManager->setOpusBitrate(value * 1000);
-                else if (key == QLatin1String("voice/codec/complexity"))
-                    voiceManager->setOpusComplexity(value);
-                else if (key == QLatin1String("voice/codec/packet_loss"))
-                    voiceManager->setOpusPacketLossPercent(value);
-            }
+            pushToVoiceManager(voiceManager, control);
+            if (control == Control::VadThreshold && volumeMeter)
+                volumeMeter->setThreshold(static_cast<float>(value));
 #endif
 
             emit voiceSettingsChanged();
         });
     };
 
-    auto addCheck = [this, layout](const QString &title, const QString &key, bool fallback) {
+    auto addCheck = [this, layout](const QString &title, Control control) {
         auto *check = new QCheckBox(title, this);
-        check->setChecked(QSettings().value(key, fallback).toBool());
-        connect(check, &QCheckBox::toggled, this, [this, key](bool checked) {
-            QSettings().setValue(key, checked);
+        check->setChecked(checkValue(control));
+        connect(check, &QCheckBox::toggled, this, [this, control](bool checked) {
+            storeCheck(control, checked);
 
 #ifndef ACHERON_NO_VOICE
-            if (voiceManager) {
-                if (key == QLatin1String("voice/codec/fec"))
-                    voiceManager->setOpusFec(checked);
-                else if (key == QLatin1String("voice/noise_suppression"))
-                    voiceManager->setNoiseSuppressionEnabled(checked);
-                else if (key == QLatin1String("voice/rnnoise_vad"))
-                    voiceManager->setUseRnnoiseVad(checked);
-            }
+            pushToVoiceManager(voiceManager, control);
 #endif
 
             emit voiceSettingsChanged();
@@ -184,66 +341,56 @@ AudioPage::AudioPage(QWidget *parent)
         layout->addWidget(check, 0);
     };
 
-    addSlider(tr("Input Gain"), QStringLiteral("voice/input_gain"), 100, 0, 200,
-              QStringLiteral("%"));
-    addSlider(tr("Output Volume"), QStringLiteral("voice/output_volume"), 100, 0, 200,
-              QStringLiteral("%"));
-    addSlider(tr("Open Mic Sensitivity"), QStringLiteral("voice/vad_threshold"), 100, 0, 2000,
-              QString());
+    addSlider(tr("Input Gain"), Control::InputGain, 0,
+              static_cast<int>(Core::Audio::AudioSettings::MaxGain), QStringLiteral(" ×"));
+    addSlider(tr("Output Volume"), Control::OutputVolume, 0,
+              static_cast<int>(Core::Audio::AudioSettings::MaxVolume), QStringLiteral(" ×"));
+    addSlider(tr("Open Mic Sensitivity"), Control::VadThreshold, 0, 2000, QString());
 
 #ifdef ACHERON_HAVE_OPUS
-    auto addCombo = [this, layout](const QString &title, const QString &key, int fallback,
-                                   const QList<Option> &options) {
+    auto addCombo = [this, layout](const QString &title, Control control, int fallback,
+                                  const QList<Option> &options) {
         layout->addWidget(fieldLabel(title, this), 0);
 
         auto *combo = new QComboBox(this);
         for (const Option &option : options)
             combo->addItem(tr(option.label), option.value);
-        const int index = combo->findData(QSettings().value(key, fallback).toInt());
+        const int index = combo->findData(comboValue(control, fallback));
         combo->setCurrentIndex(index >= 0 ? index : 0);
 
         layout->addWidget(combo, 0);
 
-        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
-                [this, combo, key]() {
-                    const int value = combo->currentData().toInt();
-                    QSettings().setValue(key, value);
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, combo, control]() {
+            const int value = combo->currentData().toInt();
+            storeCombo(control, value);
 
 #ifndef ACHERON_NO_VOICE
-                    if (voiceManager) {
-                        if (key == QLatin1String("voice/codec/application"))
-                            voiceManager->setOpusApplication(value);
-                        else if (key == QLatin1String("voice/codec/signal_type"))
-                            voiceManager->setOpusSignalType(value);
-                    }
+            pushToVoiceManager(voiceManager, control);
 #endif
 
-                    emit voiceSettingsChanged();
-                });
+            emit voiceSettingsChanged();
+        });
     };
 
     layout->addSpacing(12);
     layout->addWidget(sectionTitle(tr("Voice Processing"), this), 0);
 
-    addCombo(tr("Audio Quality"), QStringLiteral("voice/codec/application"),
-             OPUS_APPLICATION_VOIP, { { "Speech", OPUS_APPLICATION_VOIP },
-                                     { "Music", OPUS_APPLICATION_AUDIO } });
-    addCombo(tr("Encoding Mode"), QStringLiteral("voice/codec/signal_type"), OPUS_SIGNAL_VOICE,
+    addCombo(tr("Audio Quality"), Control::Application, OPUS_APPLICATION_VOIP,
+             { { "Speech", OPUS_APPLICATION_VOIP }, { "Music", OPUS_APPLICATION_AUDIO } });
+    addCombo(tr("Encoding Mode"), Control::SignalType, OPUS_SIGNAL_VOICE,
              { { "Automatic", OPUS_AUTO }, { "Voice", OPUS_SIGNAL_VOICE },
                { "Music", OPUS_SIGNAL_MUSIC } });
-    addSlider(tr("Bitrate"), QStringLiteral("voice/codec/bitrate"), 64, 8, 510,
-              QStringLiteral(" kbps"));
-    addSlider(tr("Encoder Complexity"), QStringLiteral("voice/codec/complexity"), 5, 0, 10,
-              QString());
-    addCheck(tr("Forward Error Correction"), QStringLiteral("voice/codec/fec"), true);
-    addSlider(tr("Packet Loss Recovery"), QStringLiteral("voice/codec/packet_loss"), 0, 0, 100,
-              QStringLiteral("%"));
+    addSlider(tr("Bitrate"), Control::Bitrate,
+              Core::Audio::AudioSettings::MinBitrate / 1000,
+              Core::Audio::AudioSettings::MaxBitrate / 1000, QStringLiteral(" kbps"));
+    addSlider(tr("Encoder Complexity"), Control::Complexity, 0, 10, QString());
+    addCheck(tr("Forward Error Correction"), Control::Fec);
+    addSlider(tr("Packet Loss Recovery"), Control::PacketLoss, 0, 100, QStringLiteral("%"));
 #endif
 
 #ifdef ACHERON_HAVE_RNNOISE
-    addCheck(tr("Noise Suppression"), QStringLiteral("voice/noise_suppression"), true);
-    addCheck(tr("Use Noise Suppression For Activation Detection"),
-             QStringLiteral("voice/rnnoise_vad"), true);
+    addCheck(tr("Noise Suppression"), Control::NoiseSuppression);
+    addCheck(tr("Use Noise Suppression For Activation Detection"), Control::RnnoiseVad);
 #endif
 
     layout->addStretch(1);
