@@ -245,7 +245,7 @@ MainWindow::MainWindow(Session *session, QWidget *parent) : QMainWindow(parent),
     // a stored account whose token the keychain no longer has would otherwise
     // leave the window connected to nothing at all
     connect(session, &Session::connectFailed, this,
-            [this](Core::Snowflake accountId, const QString &reason) {
+            [this, session](Core::Snowflake accountId, const QString &reason) {
                 if (currentInstance || session->client(accountId))
                     return;
 
